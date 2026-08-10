@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- DiffDesk アプリアイコン: 2つの表を突き合わせるモチーフ -->
+  <rect x="2" y="2" width="60" height="60" fill="#3d4a41"/>
+  <!-- 表A -->
+  <g>
+    <rect x="9" y="11" width="19" height="6" fill="#f7f5f0"/>
+    <rect x="9" y="20" width="19" height="5" fill="#f7f5f0" opacity=".72"/>
+    <rect x="9" y="28" width="19" height="5" fill="#8fbc8a"/>
+  </g>
+  <!-- 表B -->
+  <g>
+    <rect x="36" y="11" width="19" height="6" fill="#f7f5f0"/>
+    <rect x="36" y="20" width="19" height="5" fill="#e6c34a"/>
+    <rect x="36" y="28" width="19" height="5" fill="#f7f5f0" opacity=".72"/>
+  </g>
+  <!-- 突き合わせ矢印 ⇄ -->
+  <g fill="#f7f5f0">
+    <rect x="11" y="43" width="37" height="4"/>
+    <polygon points="46,38 56,45 46,52"/>
+    <rect x="16" y="53" width="37" height="4"/>
+    <polygon points="18,48 8,55 18,62"/>
+  </g>
+</svg>

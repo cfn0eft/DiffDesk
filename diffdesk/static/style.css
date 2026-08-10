@@ -28,7 +28,12 @@ header {
   background: var(--accent); color: #fff; padding: 0 10px;
   display: flex; align-items: center; gap: 20px;
 }
-header h1 { font-size: 14px; margin: 7px 0; font-weight: bold; letter-spacing: .05em; }
+header h1 {
+  font-size: 14px; margin: 7px 0; font-weight: bold; letter-spacing: .05em;
+  display: flex; align-items: center; gap: 7px;
+}
+header h1 .applogo { width: 20px; height: 20px; display: block; }
+header h1 .tagline { font-weight: normal; color: #b9c2bb; font-size: 12px; }
 nav#tabs { display: flex; gap: 2px; align-self: flex-end; }
 nav#tabs button {
   background: #2f3a33; color: #b9c2bb; border: 1px solid #232c27; border-bottom: none;

@@ -1,3 +1,5 @@
+<p align="center"><img src="diffdesk/static/logo.svg" width="380" alt="DiffDesk — CSV/Excel 突き合わせ・編集・Data Loader連携"></p>
+
 # DiffDesk — CSV/Excel 比較・編集・Data Loader用CSV生成ツール
 
 ヘッダーが異なる2つの表データ(例: 元のExcelマスタと Salesforce からエクスポートしたCSV)を

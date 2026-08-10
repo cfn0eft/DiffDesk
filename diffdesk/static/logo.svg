@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 88" role="img" aria-label="DiffDesk">
+  <!-- アイコン部 -->
+  <g transform="translate(12,12) scale(1)">
+    <rect x="0" y="0" width="64" height="64" fill="#3d4a41"/>
+    <g transform="scale(1)">
+      <rect x="7" y="9" width="19" height="6" fill="#f7f5f0"/>
+      <rect x="7" y="18" width="19" height="5" fill="#f7f5f0" opacity=".72"/>
+      <rect x="7" y="26" width="19" height="5" fill="#8fbc8a"/>
+      <rect x="34" y="9" width="19" height="6" fill="#f7f5f0"/>
+      <rect x="34" y="18" width="19" height="5" fill="#e6c34a"/>
+      <rect x="34" y="26" width="19" height="5" fill="#f7f5f0" opacity=".72"/>
+      <g fill="#f7f5f0">
+        <rect x="9" y="41" width="37" height="4"/>
+        <polygon points="44,36 54,43 44,50"/>
+        <rect x="14" y="51" width="37" height="4"/>
+        <polygon points="16,46 6,53 16,60"/>
+      </g>
+    </g>
+  </g>
+  <!-- ワードマーク -->
+  <text x="94" y="52" font-family="Verdana, 'Yu Gothic UI', Arial, sans-serif" font-size="34" font-weight="bold" fill="#3d4a41">DiffDesk</text>
+  <text x="96" y="72" font-family="Verdana, 'Yu Gothic UI', Arial, sans-serif" font-size="13" fill="#6d675c">CSV/Excel 突き合わせ・編集・Data Loader連携</text>
+</svg>
