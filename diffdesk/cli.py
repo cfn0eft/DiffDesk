@@ -43,7 +43,11 @@ def _load(path: str, *, encoding: str | None = None, sheet: str | None = None,
     p = Path(path)
     if not p.exists():
         raise DiffDeskError(f"ファイルが見つかりません: {path}")
-    return load_table(p.read_bytes(), p.name, encoding=encoding, sheet=sheet,
+    try:
+        raw = p.read_bytes()
+    except OSError as e:
+        raise DiffDeskError(f"ファイルを読み込めません: {path} ({e})")
+    return load_table(raw, p.name, encoding=encoding, sheet=sheet,
                       header_row=header_row - 1)
 
 

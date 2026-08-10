@@ -23,7 +23,12 @@ def _find_pair(diff: DiffResult, col_a: str) -> ColumnPair:
 def build_upsert_table(diff: DiffResult, *, external_id_col_a: str,
                        include: set[str] | None = None) -> Table:
     """アップサート用Tableを生成する。external_id_col_a はキーペアのA側列名。"""
-    include = include or set(UPSERT_STATUSES)
+    if include is None:
+        include = set(UPSERT_STATUSES)
+    if not include:
+        raise DiffDeskError(
+            "アップサート対象が空です。insert(Aのみ)かupdate(変更)の"
+            "少なくとも一方を含めてください。")
     bad = include - set(UPSERT_STATUSES)
     if bad:
         raise DiffDeskError(f"アップサート対象にできない状態です: {sorted(bad)}")

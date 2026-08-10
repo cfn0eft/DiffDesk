@@ -16,7 +16,14 @@ def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) 
     print(f"DiffDesk を起動します: {url}")
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="warning")
+    except OSError as e:
+        if getattr(e, "errno", None) in (48, 98, 10048):  # EADDRINUSE (mac/linux/win)
+            print(f"エラー: ポート {port} は使用中です。別のDiffDeskが起動していないか"
+                  f"確認するか、--port で別番号を指定してください。", file=sys.stderr)
+            sys.exit(1)
+        raise
 
 
 def main() -> None:
