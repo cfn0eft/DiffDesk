@@ -1,0 +1,99 @@
+"""APIリクエスト/レスポンスのPydanticモデル(coreのdictシリアライズの薄いラッパ)。"""
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class ParseRequest(BaseModel):
+    encoding: str | None = None
+    delimiter: str | None = None
+    sheet: str | None = None
+    header_row: int = Field(default=1, ge=1, description="1始まりのヘッダー行番号")
+
+
+class TableUpdateRequest(BaseModel):
+    columns: list[str]
+    rows: list[list[str]]
+
+
+class CleanRequest(BaseModel):
+    columns: list[str]
+    ops: list[str]
+
+
+class ValidateRequest(BaseModel):
+    key_columns: list[str] = []
+    required_columns: list[str] = []
+    formats: dict[str, str] = {}
+    max_lengths: dict[str, int] = {}
+
+
+class SearchRequest(BaseModel):
+    query: str
+    columns: list[str] | None = None
+    regex: bool = False
+    case_sensitive: bool = True
+
+
+class ReplaceRequest(SearchRequest):
+    replacement: str = ""
+
+
+class ConcatRequest(BaseModel):
+    file_ids: list[str]
+    mode: str = "union"
+
+
+class EnrichRequest(BaseModel):
+    other_file_id: str
+    key_pairs: list[list[str]]  # [[col_a, col_b], ...]
+    add_columns: list[str]
+    options: dict = {}
+
+
+class DiffRequest(BaseModel):
+    file_a: str
+    file_b: str
+    mapping: dict
+    options: dict = {}
+    row_filter: dict = {}
+
+
+class MergeRequest(BaseModel):
+    choices: list[dict] = []
+    include_only_b: bool = False
+
+
+class AutomapRequest(BaseModel):
+    file_a: str
+    file_b: str
+
+
+class ExportTableRequest(BaseModel):
+    encoding: str = "utf-8-sig"
+    format: str = "csv"  # csv | xlsx
+    delimiter: str = ","
+    errors: str = "strict"  # strict | replace
+    filename: str | None = None
+
+
+class ExportUpsertRequest(BaseModel):
+    external_id: str
+    include_insert: bool = True
+    include_update: bool = True
+    encoding: str = "utf-8-sig"
+    errors: str = "strict"
+
+
+class ExportDeleteRequest(BaseModel):
+    id_col_b: str = "Id"
+    encoding: str = "utf-8-sig"
+
+
+class ExportReportRequest(BaseModel):
+    format: str = "csv"  # csv | xlsx
+    encoding: str = "utf-8-sig"
+
+
+class ProfileSaveRequest(BaseModel):
+    profile: dict
