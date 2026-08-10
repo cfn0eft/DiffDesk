@@ -9,7 +9,7 @@
 </head>
 <body>
 <header>
-  <h1>csvtool</h1>
+  <h1>csvtool ― CSV比較・編集</h1>
   <nav id="tabs">
     <button data-tab="tab-load" class="active">1. ファイル読み込み</button>
     <button data-tab="tab-map">2. 列マッピング</button>
@@ -126,6 +126,7 @@
       <div class="scroll-x"><table id="diff-table"></table></div>
       <p class="hint">変更セルは「A側の値 → B側の値」。マージで採用する側をクリックで選択できます(既定はA)。</p>
     </div>
+    <div id="diff-statusbar" class="statusbar"></div>
     <div class="card">
       <h2>出力</h2>
       <div class="toolbar wrap">
@@ -203,7 +204,7 @@
       </div>
       <div id="val-result"></div>
     </details>
-    <div id="grid-status" class="hint"></div>
+    <div id="grid-status" class="statusbar"></div>
     <div class="toolbar">
       <span id="grid-page-info"></span>
       <button id="grid-prev">前へ</button>

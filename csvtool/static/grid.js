@@ -30,9 +30,10 @@ function markDirty() {
 }
 
 function updateStatus() {
-  $("#grid-status").textContent = grid.fileId
-    ? `${grid.filename} — ${grid.rows.length}行 × ${grid.columns.length}列` +
-      (grid.dirty ? " (未保存の変更あり)" : " (保存済み)")
+  $("#grid-status").innerHTML = grid.fileId
+    ? `<span>${escapeHtml(grid.filename)}</span>` +
+      `<span>${grid.rows.length}行 × ${grid.columns.length}列</span>` +
+      `<span class="right">${grid.dirty ? "未保存の変更あり" : "保存済み"}</span>`
     : "";
 }
 
