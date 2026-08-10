@@ -1,3 +1,3 @@
 """DiffDesk — CSV/Excel比較・編集・Data Loader用CSV生成ツール。"""
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"

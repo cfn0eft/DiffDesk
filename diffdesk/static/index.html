@@ -73,6 +73,9 @@
       <input id="profile-name" placeholder="プロファイル名" size="12">
       <button id="btn-profile-save">保存</button>
       <button id="btn-profile-delete" class="danger">削除</button>
+      <button id="btn-mapping-import" title="マッピング定義JSONファイルを読み込む">JSONファイル読込</button>
+      <button id="btn-mapping-export" title="現在のマッピングをJSONファイルとして保存">JSON書出</button>
+      <input type="file" id="mapping-file-input" accept=".json,application/json" hidden>
     </div>
     <table class="mapping-table" id="mapping-table">
       <thead><tr><th>A列(マスタ)</th><th></th><th>B列(比較対象)</th><th>キー</th><th>SF項目名(出力用)</th><th></th></tr></thead>

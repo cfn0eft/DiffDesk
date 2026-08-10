@@ -17,10 +17,25 @@ def profile_to_json(profile: Profile) -> str:
 
 
 def profile_from_json(text: str) -> Profile:
+    """プロファイルJSONを読み込む。柔軟な形式を受け付ける:
+
+    1. 完全なプロファイル形式 {"mapping": {"pairs": [...]}, ...}
+    2. ペア配列のみ {"pairs": [...]} または [...]
+    3. 単純な対応表 {"A列名": "B列名", ...}(外部ツール・AIが出力しやすい形式)
+    """
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
         raise DiffDeskError(f"プロファイルのJSONが不正です: {e}")
+    if isinstance(data, list):
+        data = {"name": "imported", "mapping": {"pairs": data}}
+    elif isinstance(data, dict) and "mapping" not in data:
+        if isinstance(data.get("pairs"), list):
+            data = {"name": str(data.get("name", "imported")),
+                    "mapping": {"pairs": data["pairs"]}}
+        elif data and all(isinstance(v, str) for v in data.values()):
+            data = {"name": "imported", "mapping": {"pairs": [
+                {"col_a": k, "col_b": v} for k, v in data.items()]}}
     return Profile.from_dict(data)
 
 

@@ -203,8 +203,10 @@ function renderMappingTable() {
     tbody.innerHTML = `<tr><td colspan="6" class="hint">「自動対応付け」または「＋ペアを追加」で対応付けを作成してください。</td></tr>`;
     return;
   }
+  const METHOD_JA = { name: "名前", value: "値", "name+value": "名前+値" };
   tbody.innerHTML = state.mapping.map((p, i) => `<tr>
-    <td><select data-i="${i}" data-f="col_a">${colOptions(colsA, p.col_a)}</select></td>
+    <td><select data-i="${i}" data-f="col_a">${colOptions(colsA, p.col_a)}</select>
+      ${p._method ? `<div class="hint">自動: ${METHOD_JA[p._method] || p._method}一致 ${Math.round((p._confidence || 0) * 100)}%</div>` : ""}</td>
     <td>↔</td>
     <td><select data-i="${i}" data-f="col_b">${colOptions(colsB, p.col_b)}</select></td>
     <td style="text-align:center"><input type="checkbox" data-i="${i}" data-f="is_key" ${p.is_key ? "checked" : ""}></td>
@@ -242,6 +244,7 @@ $("#btn-automap").onclick = async () => {
     if (!r.pairs.length) return toast("対応付けできるペアが見つかりませんでした。手動で追加してください。", true);
     state.mapping = r.pairs.map(p => ({
       col_a: p.col_a, col_b: p.col_b, is_key: p.is_key, sf_field: p.sf_field,
+      _method: p.method, _confidence: p.confidence,
     }));
     renderMappingTable();
     const detail = r.by_value
@@ -303,6 +306,86 @@ function applyOptions(o) {
   $("#opt-case").checked = o.ignore_case ?? false;
   $("#opt-tolerance").value = o.numeric_tolerance ?? "";
 }
+
+// ---------------------------------------------------------------- マッピングJSONの読込/書出
+function parseMappingJson(data) {
+  // 受理する形式:
+  //  1) プロファイル形式 {mapping: {pairs: [...]}, options, row_filter, external_id}
+  //  2) {pairs: [...]} / [...](ペア配列)
+  //  3) 単純な対応表 {"A列名": "B列名", ...}
+  let pairs = null, options = null, filters = null, externalId = null;
+  if (Array.isArray(data)) {
+    pairs = data;
+  } else if (data && typeof data === "object") {
+    if (data.mapping && Array.isArray(data.mapping.pairs)) {
+      pairs = data.mapping.pairs;
+      options = data.options || null;
+      filters = data.row_filter || null;
+      externalId = data.external_id || null;
+    } else if (Array.isArray(data.pairs)) {
+      pairs = data.pairs;
+    } else if (Object.values(data).every(v => typeof v === "string")) {
+      pairs = Object.entries(data).map(([a, b]) => ({ col_a: a, col_b: b }));
+    }
+  }
+  if (!pairs || !pairs.length) throw new Error("マッピングとして解釈できるJSONではありません");
+  const normalized = pairs.map(p => ({
+    col_a: String(p.col_a ?? ""), col_b: String(p.col_b ?? ""),
+    is_key: !!p.is_key, sf_field: p.sf_field ? String(p.sf_field) : null,
+  })).filter(p => p.col_a && p.col_b);
+  if (!normalized.length) throw new Error("有効なペアがありません(col_a / col_b が必要です)");
+  return { pairs: normalized, options, filters, externalId };
+}
+
+$("#btn-mapping-import").onclick = () => $("#mapping-file-input").click();
+$("#mapping-file-input").onchange = async () => {
+  const file = $("#mapping-file-input").files[0];
+  $("#mapping-file-input").value = "";
+  if (!file) return;
+  try {
+    const parsed = parseMappingJson(JSON.parse(await file.text()));
+    const colsA = state.fileA?.preview.columns || [];
+    const colsB = state.fileB?.preview.columns || [];
+    let dropped = 0;
+    let pairs = parsed.pairs;
+    if (colsA.length && colsB.length) {
+      const kept = pairs.filter(p => colsA.includes(p.col_a) && colsB.includes(p.col_b));
+      dropped = pairs.length - kept.length;
+      pairs = kept;
+    }
+    if (!pairs.length) return toast("JSON内の列名が読み込み済みファイルの列と一致しません", true);
+    state.mapping = pairs;
+    if (parsed.options) applyOptions(parsed.options);
+    if (parsed.filters) {
+      state.filtersA = parsed.filters.conditions_a || [];
+      state.filtersB = parsed.filters.conditions_b || [];
+    }
+    rebuildMappingSelects();
+    toast(`${file.name} から${pairs.length}組を読み込みました` +
+          (dropped ? `(列名不一致の${dropped}組は除外)` : "") +
+          (pairs.some(p => p.is_key) ? "" : "。キー列にチェックを入れてください"));
+  } catch (e) { toast(`JSONの読み込みに失敗: ${e.message}`, true); }
+};
+
+$("#btn-mapping-export").onclick = () => {
+  if (!state.mapping.length) return toast("書き出すマッピングがありません", true);
+  const profile = {
+    version: 1,
+    name: $("#profile-name").value.trim() || "mapping",
+    mapping: { pairs: state.mapping.map(p => ({
+      col_a: p.col_a, col_b: p.col_b, is_key: p.is_key, sf_field: p.sf_field,
+    })) },
+    options: currentOptions(),
+    row_filter: { conditions_a: state.filtersA, conditions_b: state.filtersB },
+    external_id: state.mapping.find(p => p.is_key)?.col_a || null,
+  };
+  const blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${profile.name}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
 
 // ---------------------------------------------------------------- プロファイル
 async function refreshProfiles() {

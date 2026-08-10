@@ -75,6 +75,13 @@ def _add_input_options(p: argparse.ArgumentParser, *, two_files: bool) -> None:
 
 def _run_diff_common(args):
     profile = load_profile(args.profile)
+    # キー未指定のプロファイル(単純対応表JSON等)は --external-id / external_id をキーに昇格
+    if not profile.mapping.key_pairs:
+        ext = getattr(args, "external_id", None) or profile.external_id
+        if ext:
+            for p in profile.mapping.pairs:
+                if p.col_a == ext:
+                    p.is_key = True
     a = _load(args.file_a, encoding=args.encoding_a, sheet=args.sheet_a,
               header_row=args.header_row_a)
     b = _load(args.file_b, encoding=args.encoding_b, sheet=args.sheet_b,
@@ -197,6 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("diff", help="2ファイルを比較して差分サマリー/レポートを出力")
     _add_input_options(p, two_files=True)
     p.add_argument("--profile", required=True, help="プロファイル名またはJSONパス")
+    p.add_argument("--external-id", help="キー列(A側列名。キー未指定のマッピングJSON用)")
     p.add_argument("--report", help="差分レポートCSVの出力先")
     p.add_argument("--xlsx", help="色付きExcelレポートの出力先")
     p.add_argument("--json", action="store_true", help="サマリーをJSONでも出力")
@@ -220,6 +228,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("verify", help="投入後の検証(件数照合と差異判定。要確認なら終了コード1)")
     _add_input_options(p, two_files=True)
     p.add_argument("--profile", required=True, help="プロファイル名またはJSONパス")
+    p.add_argument("--external-id", help="キー列(A側列名。キー未指定のマッピングJSON用)")
     p.add_argument("--allow-only-b", action="store_true",
                    help="Bのみのレコード(SF既存レコード)を問題として扱わない")
     p.add_argument("--report", help="検証レポートの出力先(.xlsx または .csv)")

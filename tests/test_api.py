@@ -138,9 +138,11 @@ class TestDiffFlow:
         fb = upload(client, "sf.csv", load_fixture("salesforce_export.csv"))["file_id"]
         r = client.post("/api/automap", json={"file_a": fa, "file_b": fb})
         body = r.json()
-        assert body["by_value"] >= 2  # 社員番号↔EmployeeNumber__c 等が値から推定される
         by = {p["col_a"]: p["col_b"] for p in body["pairs"]}
+        # 名前が一致しない日本語↔SF API名でも辞書・値ベースで対応付けられる
         assert by["社員番号"] == "EmployeeNumber__c"
+        assert by["氏名"] == "Name"
+        assert by["メール"] == "Email"
 
     def test_verify_endpoint_and_export(self, client):
         diff_id, _ = TestDiffFlow().run_diff(client)

@@ -61,6 +61,24 @@ def test_invalid_name(tmp_path):
         save_profile(p, directory=tmp_path)
 
 
+def test_flexible_json_simple_dict():
+    """単純な対応表JSON {"A列": "B列"} をプロファイルとして読める。"""
+    p = profile_from_json('{"社員番号": "EmployeeNumber__c", "氏名": "Name"}')
+    assert [(x.col_a, x.col_b) for x in p.mapping.pairs] == [
+        ("社員番号", "EmployeeNumber__c"), ("氏名", "Name")]
+    assert not p.mapping.key_pairs  # キーは別途指定が必要
+
+
+def test_flexible_json_pairs_only():
+    p = profile_from_json('{"pairs": [{"col_a": "a", "col_b": "b", "is_key": true}]}')
+    assert p.mapping.pairs[0].is_key
+
+
+def test_flexible_json_array():
+    p = profile_from_json('[{"col_a": "a", "col_b": "b"}]')
+    assert p.mapping.pairs[0].col_a == "a"
+
+
 def test_invalid_json():
     with pytest.raises(DiffDeskError):
         profile_from_json("{not json")

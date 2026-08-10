@@ -273,8 +273,8 @@ def automap(req: sc.AutomapRequest):
     suggestions = suggest_mapping(a, b)
     return {
         "pairs": [s.to_dict() for s in suggestions],
-        "by_name": sum(1 for s in suggestions if s.method == "name"),
-        "by_value": sum(1 for s in suggestions if s.method == "value"),
+        "by_name": sum(1 for s in suggestions if "name" in s.method),
+        "by_value": sum(1 for s in suggestions if "value" in s.method),
     }
 
 

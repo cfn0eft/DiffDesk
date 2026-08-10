@@ -106,6 +106,21 @@ def test_verify_command_pass(fixtures_dir, tmp_path):
     assert rc == 0
 
 
+def test_simple_mapping_json_with_external_id(fixtures_dir, tmp_path, capsys):
+    """単純対応表JSON+--external-idでキー指定なしでも動く。"""
+    mapping = tmp_path / "map.json"
+    mapping.write_text(
+        '{"社員番号": "EmployeeNumber__c", "氏名": "Name", "メール": "Email"}',
+        encoding="utf-8")
+    rc = run_cli([
+        "verify", str(fixtures_dir / "master_utf8.csv"),
+        str(fixtures_dir / "salesforce_export.csv"),
+        "--profile", str(mapping), "--external-id", "社員番号",
+    ])
+    assert rc == 1  # フィクスチャは差異ありなので要確認
+    assert "未投入" in capsys.readouterr().out
+
+
 def test_convert_encoding(fixtures_dir, tmp_path):
     out = tmp_path / "out.csv"
     rc = run_cli([
