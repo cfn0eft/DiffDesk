@@ -186,6 +186,20 @@ details[open].card summary { border-bottom-color: var(--border); margin-bottom: 
 .statusbar .right { margin-left: auto; }
 .card .statusbar { margin: 6px 0 0; border: 1px solid var(--border); }
 
+/* ---------------- 投入検証 ---------------- */
+#verify-banner {
+  padding: 10px 14px; font-size: 16px; font-weight: bold; margin: 4px 0 8px;
+  border: 1px solid;
+}
+#verify-banner.ok { background: var(--green); border-color: #4e8a47; color: #1f4a1b; }
+#verify-banner.ng { background: var(--red); border-color: #b05248; color: #6d241b; }
+#verify-counts { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; }
+#verify-counts b { font-size: 14px; }
+#verify-problems { margin: 4px 0; }
+#verify-problems div { font-size: 12px; padding: 2px 0; }
+#verify-problems .issue { color: var(--danger); }
+#verify-problems .allowed { color: var(--hint); }
+
 /* ---------------- トースト・ダイアログ ---------------- */
 #toast {
   position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);

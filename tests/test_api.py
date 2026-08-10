@@ -128,10 +128,31 @@ class TestDiffFlow:
         fa = upload(client, "a.csv", "Name,Email\n".encode("utf-8"))["file_id"]
         fb = upload(client, "b.csv", "ｎａｍｅ,Email,Extra\n".encode("utf-8"))["file_id"]
         r = client.post("/api/automap", json={"file_a": fa, "file_b": fb})
-        pairs = r.json()["pairs"]
-        assert {"col_a": "Email", "col_b": "Email",
-                "is_key": False, "sf_field": None} in pairs
-        assert any(p["col_a"] == "Name" and p["col_b"] == "ｎａｍｅ" for p in pairs)
+        body = r.json()
+        assert body["by_name"] == 2
+        assert any(p["col_a"] == "Email" and p["col_b"] == "Email" for p in body["pairs"])
+        assert any(p["col_a"] == "Name" and p["col_b"] == "ｎａｍｅ" for p in body["pairs"])
+
+    def test_automap_value_based(self, client):
+        fa = upload(client, "master.csv", load_fixture("master_utf8.csv"))["file_id"]
+        fb = upload(client, "sf.csv", load_fixture("salesforce_export.csv"))["file_id"]
+        r = client.post("/api/automap", json={"file_a": fa, "file_b": fb})
+        body = r.json()
+        assert body["by_value"] >= 2  # 社員番号↔EmployeeNumber__c 等が値から推定される
+        by = {p["col_a"]: p["col_b"] for p in body["pairs"]}
+        assert by["社員番号"] == "EmployeeNumber__c"
+
+    def test_verify_endpoint_and_export(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        v = client.get(f"/api/diff/{diff_id}/verify").json()
+        assert v["passed"] is False and v["only_a"] == 2
+        v2 = client.get(f"/api/diff/{diff_id}/verify?only_b_is_error=false").json()
+        assert v2["only_b"] == 1 and v2["passed"] is False  # 未投入があるため依然NG
+        r = client.post(f"/api/export/verify/{diff_id}", json={"format": "csv"})
+        text = r.content.decode("utf-8-sig")
+        assert len(text.strip().splitlines()) == 6  # ヘッダー+問題5行
+        r = client.post(f"/api/export/verify/{diff_id}", json={"format": "xlsx"})
+        assert r.content[:2] == b"PK"
 
     def test_diff_summary_and_rows(self, client):
         diff_id, body = self.run_diff(client)

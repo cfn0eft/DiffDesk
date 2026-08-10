@@ -1,7 +1,6 @@
 """APIエンドポイント。ロジックは全て diffdesk.core に委譲する。"""
 from __future__ import annotations
 
-import unicodedata
 import urllib.parse
 
 from fastapi import APIRouter, File, UploadFile
@@ -9,6 +8,10 @@ from fastapi.responses import Response
 
 from ..core import (
     CLEAN_OPS,
+    build_verification,
+    build_verification_table,
+    build_verification_xlsx,
+    suggest_mapping,
     DiffOptions,
     MappingConfig,
     Profile,
@@ -263,25 +266,16 @@ def enrich_file(file_id: str, req: sc.EnrichRequest):
 
 # ---------------------------------------------------------------- mapping/diff
 
-def _norm_header(s: str) -> str:
-    return unicodedata.normalize("NFKC", s).strip().casefold()
-
-
 @router.post("/automap")
 def automap(req: sc.AutomapRequest):
-    cols_a = store.get_table(req.file_a).columns
-    cols_b = store.get_table(req.file_b).columns
-    pairs = []
-    used_b: set[str] = set()
-    for a in cols_a:
-        hit = next((b for b in cols_b if b not in used_b and a == b), None)
-        if hit is None:
-            hit = next((b for b in cols_b
-                        if b not in used_b and _norm_header(a) == _norm_header(b)), None)
-        if hit is not None:
-            used_b.add(hit)
-            pairs.append({"col_a": a, "col_b": hit, "is_key": False, "sf_field": None})
-    return {"pairs": pairs}
+    a = store.get_table(req.file_a)
+    b = store.get_table(req.file_b)
+    suggestions = suggest_mapping(a, b)
+    return {
+        "pairs": [s.to_dict() for s in suggestions],
+        "by_name": sum(1 for s in suggestions if s.method == "name"),
+        "by_value": sum(1 for s in suggestions if s.method == "value"),
+    }
 
 
 @router.post("/diff")
@@ -315,6 +309,12 @@ def diff_rows(diff_id: str, status: str = "", offset: int = 0, limit: int = 200)
         "offset": offset,
         "rows": [r.to_dict() for r in rows[offset:offset + limit]],
     }
+
+
+@router.get("/diff/{diff_id}/verify")
+def verify_diff(diff_id: str, only_b_is_error: bool = True):
+    result = store.get_diff(diff_id)
+    return build_verification(result, only_b_is_error=only_b_is_error).to_dict()
 
 
 @router.post("/diff/{diff_id}/merge")
@@ -372,6 +372,19 @@ def export_report(diff_id: str, req: sc.ExportReportRequest):
     table = build_report_table(result)
     raw = write_csv(table, encoding=req.encoding)
     return _download(raw, "差分レポート.csv", "text/csv")
+
+
+@router.post("/export/verify/{diff_id}")
+def export_verify(diff_id: str, req: sc.ExportVerifyRequest):
+    result = store.get_diff(diff_id)
+    if req.format == "xlsx":
+        return _download(
+            build_verification_xlsx(result, only_b_is_error=req.only_b_is_error),
+            "投入検証レポート.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    table = build_verification_table(result, only_b_is_error=req.only_b_is_error)
+    raw = write_csv(table, encoding=req.encoding)
+    return _download(raw, "投入検証レポート.csv", "text/csv")
 
 
 # ---------------------------------------------------------------- profiles
