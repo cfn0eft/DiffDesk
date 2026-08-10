@@ -114,6 +114,15 @@ function renderGrid() {
 
   container.querySelectorAll("tbody input:not(.rowcheck)").forEach(inp => {
     inp.onfocus = () => { inp.dataset.orig = inp.value; };
+    inp.onkeydown = e => {
+      if (e.key === "Enter") {  // Enterで同じ列の下のセルへ
+        e.preventDefault();
+        inp.blur();
+        const next = container.querySelector(
+          `input[data-row="${+inp.dataset.row + 1}"][data-col="${inp.dataset.col}"]`);
+        if (next) { next.focus(); next.select(); }
+      }
+    };
     inp.onchange = () => {
       if (inp.value !== inp.dataset.orig) {
         pushUndo({ type: "cell", row: +inp.dataset.row, col: +inp.dataset.col,

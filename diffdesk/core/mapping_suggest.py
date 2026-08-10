@@ -126,29 +126,39 @@ class MappingSuggestion:
     col_b: str
     method: str        # "name" | "value" | "name+value"
     confidence: float  # 0.0〜1.0
+    key_candidate: bool = False  # 両側で値がユニーク=紐づけキーの有力候補
 
     def to_dict(self) -> dict:
         return {
             "col_a": self.col_a, "col_b": self.col_b,
             "is_key": False, "sf_field": None,
             "method": self.method, "confidence": round(self.confidence, 2),
+            "key_candidate": self.key_candidate,
         }
 
 
-def _value_sets(table: Table) -> dict[str, set[str]]:
+def _value_sets(table: Table) -> tuple[dict[str, set[str]], dict[str, bool]]:
+    """列ごとの正規化済み値集合と、キー候補性(サンプル内で空なし・重複なし)を返す。"""
     idx = {c: i for i, c in enumerate(table.columns)}
     sets: dict[str, set[str]] = {c: set() for c in table.columns}
-    for row in table.rows[:_SAMPLE_ROWS]:
+    counts: dict[str, int] = {c: 0 for c in table.columns}
+    sampled = table.rows[:_SAMPLE_ROWS]
+    for row in sampled:
         for c, i in idx.items():
             v = _canon_value(row[i])
             if v:
                 sets[c].add(v)
-    return sets
+                counts[c] += 1
+    uniqueish = {
+        c: bool(sampled) and counts[c] == len(sampled) and len(sets[c]) == counts[c]
+        for c in table.columns
+    }
+    return sets, uniqueish
 
 
 def suggest_mapping(table_a: Table, table_b: Table) -> list[MappingSuggestion]:
-    sets_a = _value_sets(table_a)
-    sets_b = _value_sets(table_b)
+    sets_a, unique_a = _value_sets(table_a)
+    sets_b, unique_b = _value_sets(table_b)
 
     candidates: list[tuple[float, str, str, str]] = []  # (score, a, b, method)
     for a in table_a.columns:
@@ -179,7 +189,9 @@ def suggest_mapping(table_a: Table, table_b: Table) -> list[MappingSuggestion]:
             continue
         used_a.add(a)
         used_b.add(b)
-        picked.append(MappingSuggestion(a, b, method, score))
+        picked.append(MappingSuggestion(
+            a, b, method, score,
+            key_candidate=unique_a.get(a, False) and unique_b.get(b, False)))
 
     order = {c: i for i, c in enumerate(table_a.columns)}
     picked.sort(key=lambda s: order[s.col_a])

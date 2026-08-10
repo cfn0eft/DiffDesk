@@ -35,8 +35,13 @@ async function uploadFile(side, file) {
     renderPreview(side);
     refreshFileList();
     rebuildMappingSelects();
+    updateNextSteps();
     toast(`${info.filename} を読み込みました (${info.preview.total_rows}行)`);
   } catch (e) { toast(e.message, true); }
+}
+
+function updateNextSteps() {
+  $("#next-steps").hidden = !(state.fileA && state.fileB);
 }
 
 function renderParsePanel(side) {
@@ -235,24 +240,40 @@ $("#btn-add-pair").onclick = () => {
   renderMappingTable();
 };
 
-$("#btn-automap").onclick = async () => {
-  if (!state.fileA || !state.fileB) return toast("先にファイルA・Bを読み込んでください", true);
-  try {
-    const r = await postJson("/api/automap", {
-      file_a: state.fileA.file_id, file_b: state.fileB.file_id,
-    });
-    if (!r.pairs.length) return toast("対応付けできるペアが見つかりませんでした。手動で追加してください。", true);
-    state.mapping = r.pairs.map(p => ({
-      col_a: p.col_a, col_b: p.col_b, is_key: p.is_key, sf_field: p.sf_field,
-      _method: p.method, _confidence: p.confidence,
-    }));
-    renderMappingTable();
-    const detail = r.by_value
-      ? `(名前一致${r.by_name}組・データの中身から推定${r.by_value}組)`
-      : "";
-    toast(`${r.pairs.length}組を自動対応付けしました${detail}。キー列にチェックを入れてください。`);
-  } catch (e) { toast(e.message, true); }
-};
+// 自動対応付け(キー自動推定込み)。成功時はペア数、失敗時はnullを返す。
+async function doAutomap() {
+  if (!state.fileA || !state.fileB) {
+    toast("先にファイルA・Bを読み込んでください", true);
+    return null;
+  }
+  const r = await postJson("/api/automap", {
+    file_a: state.fileA.file_id, file_b: state.fileB.file_id,
+  });
+  if (!r.pairs.length) {
+    toast("対応付けできるペアが見つかりませんでした。手動で追加してください。", true);
+    return null;
+  }
+  state.mapping = r.pairs.map(p => ({
+    col_a: p.col_a, col_b: p.col_b, is_key: p.is_key, sf_field: p.sf_field,
+    _method: p.method, _confidence: p.confidence, _keyCandidate: p.key_candidate,
+  }));
+  // キー自動推定: 両側でユニークな列のうち、番号/ID/コード系の名前を優先
+  const candidates = state.mapping.filter(p => p._keyCandidate);
+  if (candidates.length) {
+    const idLike = /番号|ID|コード|code|number|key|No\b/i;
+    const best = candidates.find(p => idLike.test(p.col_a + p.col_b)) || candidates[0];
+    best.is_key = true;
+  }
+  renderMappingTable();
+  const detail = r.by_value ? `(名前一致${r.by_name}組・中身から推定${r.by_value}組)` : "";
+  const keyMsg = candidates.length
+    ? `キー候補として「${state.mapping.find(p => p.is_key)?.col_a}」を自動設定しました。`
+    : "キー列にチェックを入れてください。";
+  toast(`${r.pairs.length}組を自動対応付けしました${detail}。${keyMsg}`);
+  return r.pairs.length;
+}
+
+$("#btn-automap").onclick = () => doAutomap().catch(e => toast(e.message, true));
 
 // ---- 行フィルタ
 function renderFilters() {
@@ -440,7 +461,7 @@ $("#btn-profile-delete").onclick = async () => {
 };
 
 // ---------------------------------------------------------------- 差分実行
-$("#btn-run-diff").onclick = async () => {
+async function runDiff() {
   if (!state.fileA || !state.fileB) return toast("ファイルAとBを読み込んでください", true);
   if (!state.mapping.length) return toast("列マッピングを設定してください", true);
   if (!state.mapping.some(p => p.is_key)) return toast("キー列を1つ以上指定してください", true);
@@ -458,9 +479,68 @@ $("#btn-run-diff").onclick = async () => {
     renderDiff();
     toast("差分を実行しました");
   } catch (e) { toast(e.message, true); }
+}
+$("#btn-run-diff").onclick = runDiff;
+
+// おまかせ比較: 自動対応付け → キー自動推定 → 差分実行
+$("#btn-omakase").onclick = async () => {
+  try {
+    const n = await doAutomap();
+    if (!n) { switchTab("tab-map"); return; }
+    if (!state.mapping.some(p => p.is_key)) {
+      switchTab("tab-map");
+      return toast("キー列を自動で決められませんでした。キーにチェックを入れて「差分を実行」してください。", true);
+    }
+    await runDiff();
+  } catch (e) { toast(e.message, true); }
 };
+
+$("#btn-goto-map").onclick = () => switchTab("tab-map");
+
+$("#btn-swap").onclick = () => {
+  if (!state.fileA && !state.fileB) return;
+  [state.fileA, state.fileB] = [state.fileB, state.fileA];
+  state.mapping = state.mapping.map(p => ({
+    col_a: p.col_b, col_b: p.col_a, is_key: p.is_key, sf_field: null,
+  }));
+  [state.filtersA, state.filtersB] = [state.filtersB, state.filtersA];
+  renderParsePanel("a"); renderParsePanel("b");
+  renderPreview("a"); renderPreview("b");
+  rebuildMappingSelects();
+  updateNextSteps();
+  toast("ファイルAとBを入れ替えました(マッピングも反転)");
+};
+
+// ---------------------------------------------------------------- 設定の記憶
+const PREFS_KEY = "diffdesk-prefs";
+
+function savePrefs() {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      options: currentOptions(),
+      convertEnc: $("#convert-encoding").value,
+      gridEnc: $("#grid-export-encoding").value,
+    }));
+  } catch { /* プライベートモード等では保存しない */ }
+}
+
+function restorePrefs() {
+  try {
+    const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || "null");
+    if (!prefs) return;
+    if (prefs.options) applyOptions(prefs.options);
+    if (prefs.convertEnc) $("#convert-encoding").value = prefs.convertEnc;
+    if (prefs.gridEnc) $("#grid-export-encoding").value = prefs.gridEnc;
+  } catch { /* 壊れた保存値は無視 */ }
+}
+
+["#opt-trim", "#opt-width", "#opt-case", "#opt-tolerance",
+ "#convert-encoding", "#grid-export-encoding"].forEach(sel => {
+  $(sel).addEventListener("change", savePrefs);
+});
 
 // ---------------------------------------------------------------- 初期化
 initGrid();
+restorePrefs();
 refreshProfiles();
 refreshFileList();

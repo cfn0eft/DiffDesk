@@ -150,6 +150,15 @@ class TestSuggestMapping:
         assert s[0].method == "name+value"
 
 
+def test_key_candidate_detection(master_utf8, sf_export):
+    """両側で値がユニークな列ペアがキー候補として報告される。"""
+    a, b = load_csv(master_utf8), load_csv(sf_export)
+    s = suggest_mapping(a, b)
+    by = {x.col_a: x for x in s}
+    assert by["社員番号"].key_candidate  # 両側ユニーク
+    assert not by["部署"].key_candidate  # 部署は重複あり
+
+
 def test_fixture_value_mapping(master_utf8, sf_export):
     """フィクスチャ: 日本語ヘッダー vs SF API名でも値ベースで対応付けできる。"""
     a, b = load_csv(master_utf8), load_csv(sf_export)
