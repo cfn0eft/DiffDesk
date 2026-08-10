@@ -16,6 +16,9 @@ from pathlib import Path
 
 from .core import (
     DiffDeskError,
+    build_verification,
+    build_verification_table,
+    build_verification_xlsx,
     build_delete_table,
     build_report_table,
     build_sdl,
@@ -122,6 +125,31 @@ def cmd_upsert(args) -> int:
     return 0
 
 
+def cmd_verify(args) -> int:
+    """投入後検証: 件数照合と差異判定。合格なら終了コード0、要確認なら1。"""
+    profile, result = _run_diff_common(args)
+    v = build_verification(result, only_b_is_error=not args.allow_only_b)
+    print("✔ 投入OK(全件一致)" if v.passed else "✖ 要確認(差異あり)")
+    print(f"  A照合対象: {v.rows_a}件  B照合対象: {v.rows_b}件  キー一致: {v.matched}件")
+    print(f"  完全一致: {v.same}  値差異: {v.changed}  未投入(Aのみ): {v.only_a}"
+          f"  想定外(Bのみ): {v.only_b}")
+    if v.unmatchable_a or v.unmatchable_b:
+        print(f"  照合不能: A={v.unmatchable_a}件 B={v.unmatchable_b}件(キー重複・空)")
+    for p in v.problems:
+        print(f"  - {p}")
+    if args.report:
+        path = Path(args.report)
+        if path.suffix.lower() == ".xlsx":
+            path.write_bytes(build_verification_xlsx(
+                result, only_b_is_error=not args.allow_only_b))
+            print(f"出力: {path}")
+        else:
+            _write_out(build_verification_table(
+                result, only_b_is_error=not args.allow_only_b),
+                args.report, args.out_encoding)
+    return 0 if v.passed else 1
+
+
 def cmd_convert(args) -> int:
     t = _load(args.file, encoding=args.in_encoding, sheet=args.sheet,
               header_row=args.header_row)
@@ -188,6 +216,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sdl", help=".sdlマッピングファイルの出力先")
     add_out_encoding(p)
     p.set_defaults(func=cmd_upsert)
+
+    p = sub.add_parser("verify", help="投入後の検証(件数照合と差異判定。要確認なら終了コード1)")
+    _add_input_options(p, two_files=True)
+    p.add_argument("--profile", required=True, help="プロファイル名またはJSONパス")
+    p.add_argument("--allow-only-b", action="store_true",
+                   help="Bのみのレコード(SF既存レコード)を問題として扱わない")
+    p.add_argument("--report", help="検証レポートの出力先(.xlsx または .csv)")
+    add_out_encoding(p)
+    p.set_defaults(func=cmd_verify)
 
     p = sub.add_parser("convert", help="エンコーディング/形式変換(CSV↔Excel)")
     _add_input_options(p, two_files=False)

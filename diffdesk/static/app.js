@@ -239,10 +239,15 @@ $("#btn-automap").onclick = async () => {
     const r = await postJson("/api/automap", {
       file_a: state.fileA.file_id, file_b: state.fileB.file_id,
     });
-    if (!r.pairs.length) return toast("列名が一致するペアが見つかりませんでした。手動で追加してください。", true);
-    state.mapping = r.pairs;
+    if (!r.pairs.length) return toast("対応付けできるペアが見つかりませんでした。手動で追加してください。", true);
+    state.mapping = r.pairs.map(p => ({
+      col_a: p.col_a, col_b: p.col_b, is_key: p.is_key, sf_field: p.sf_field,
+    }));
     renderMappingTable();
-    toast(`${r.pairs.length}組を自動対応付けしました。キー列にチェックを入れてください。`);
+    const detail = r.by_value
+      ? `(名前一致${r.by_name}組・データの中身から推定${r.by_value}組)`
+      : "";
+    toast(`${r.pairs.length}組を自動対応付けしました${detail}。キー列にチェックを入れてください。`);
   } catch (e) { toast(e.message, true); }
 };
 

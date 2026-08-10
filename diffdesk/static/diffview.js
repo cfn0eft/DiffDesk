@@ -36,8 +36,48 @@ export function renderDiff() {
   $$(".statusfilter").forEach(b =>
     b.classList.toggle("active", b.dataset.status === ""));
   renderStatusbar();
+  loadVerification();
   loadRows();
 }
+
+// ---------------------------------------------------------------- 投入検証
+async function loadVerification() {
+  const d = state.diff;
+  if (!d) return;
+  const allowB = $("#verify-allow-b").checked;
+  try {
+    const v = await (await api(
+      `/api/diff/${d.diff_id}/verify?only_b_is_error=${!allowB}`)).json();
+    const banner = $("#verify-banner");
+    banner.className = v.passed ? "ok" : "ng";
+    banner.textContent = v.passed
+      ? "✔ 投入OK — 件数・内容ともに一致しています"
+      : "✖ 要確認 — 差異があります";
+    $("#verify-counts").innerHTML =
+      `<span>投入元(A): <b>${v.rows_a}</b>件</span>` +
+      `<span>Salesforce(B): <b>${v.rows_b}</b>件</span>` +
+      `<span>キー一致: <b>${v.matched}</b>件</span>` +
+      `<span>完全一致: <b>${v.same}</b>件 (${(v.match_rate * 100).toFixed(1)}%)</span>` +
+      `<span>値差異: <b>${v.changed}</b></span>` +
+      `<span>未投入(Aのみ): <b>${v.only_a}</b></span>` +
+      `<span>想定外(Bのみ): <b>${v.only_b}</b></span>` +
+      (v.unmatchable_a + v.unmatchable_b
+        ? `<span>照合不能: <b>${v.unmatchable_a + v.unmatchable_b}</b></span>` : "");
+    $("#verify-problems").innerHTML = v.problems.map(p =>
+      `<div class="${p.startsWith("(許容)") ? "allowed" : "issue"}">・${escapeHtml(p)}</div>`
+    ).join("");
+  } catch (e) { toast(e.message, true); }
+}
+
+$("#verify-allow-b").onchange = loadVerification;
+$("#btn-export-verify-xlsx").onclick = () => {
+  if (state.diff) postDownload(`/api/export/verify/${state.diff.diff_id}`,
+    { format: "xlsx", only_b_is_error: !$("#verify-allow-b").checked }, "verify.xlsx");
+};
+$("#btn-export-verify-csv").onclick = () => {
+  if (state.diff) postDownload(`/api/export/verify/${state.diff.diff_id}`,
+    { format: "csv", only_b_is_error: !$("#verify-allow-b").checked }, "verify.csv");
+};
 
 function renderStatusbar() {
   const d = state.diff;

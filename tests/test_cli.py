@@ -78,6 +78,34 @@ def test_upsert_excel_input(fixtures_dir, profile_path, tmp_path):
     assert len(load_csv(out.read_bytes()).rows) == 4
 
 
+def test_verify_command(fixtures_dir, profile_path, tmp_path, capsys):
+    report = tmp_path / "verify.xlsx"
+    rc = run_cli([
+        "verify", str(fixtures_dir / "master_utf8.csv"),
+        str(fixtures_dir / "salesforce_export.csv"),
+        "--profile", str(profile_path), "--report", str(report),
+    ])
+    assert rc == 1  # 差異あり
+    out = capsys.readouterr().out
+    assert "要確認" in out and "未投入" in out
+    assert report.read_bytes()[:2] == b"PK"
+
+
+def test_verify_command_pass(fixtures_dir, tmp_path):
+    # 同一ファイル同士の比較=全件一致で合格(終了コード0)
+    p = Profile(name="self", mapping=MappingConfig(pairs=[
+        ColumnPair("社員番号", "社員番号", is_key=True),
+        ColumnPair("氏名", "氏名"),
+    ]))
+    path = save_profile(p, directory=tmp_path)
+    rc = run_cli([
+        "verify", str(fixtures_dir / "master_utf8.csv"),
+        str(fixtures_dir / "master_utf8.csv"),
+        "--profile", str(path),
+    ])
+    assert rc == 0
+
+
 def test_convert_encoding(fixtures_dir, tmp_path):
     out = tmp_path / "out.csv"
     rc = run_cli([

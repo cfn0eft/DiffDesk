@@ -95,5 +95,11 @@ class ExportReportRequest(BaseModel):
     encoding: str = "utf-8-sig"
 
 
+class ExportVerifyRequest(BaseModel):
+    format: str = "xlsx"  # xlsx | csv
+    only_b_is_error: bool = True
+    encoding: str = "utf-8-sig"
+
+
 class ProfileSaveRequest(BaseModel):
     profile: dict

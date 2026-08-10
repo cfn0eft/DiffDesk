@@ -108,6 +108,20 @@
 <section id="tab-diff" class="tab">
   <div id="diff-empty" class="card"><p>まだ差分を実行していません。「2. 列マッピング」から実行してください。</p></div>
   <div id="diff-body" hidden>
+    <div class="card" id="verify-card">
+      <h2>投入検証 <span class="hint">(A=投入元マスタ、B=投入後のSalesforceエクスポートとして判定)</span></h2>
+      <div id="verify-banner"></div>
+      <div class="toolbar">
+        <span id="verify-counts"></span>
+      </div>
+      <div id="verify-problems"></div>
+      <div class="toolbar">
+        <label><input type="checkbox" id="verify-allow-b"> SFに元からあるレコード(Bのみ)を許容する</label>
+        <span class="spacer"></span>
+        <button id="btn-export-verify-xlsx" class="primary">検証レポートExcel</button>
+        <button id="btn-export-verify-csv">検証レポートCSV</button>
+      </div>
+    </div>
     <div id="summary-cards" class="cards"></div>
     <div id="diff-warnings"></div>
     <div class="card">

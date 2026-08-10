@@ -17,6 +17,13 @@ from .edit import (
     set_cell,
 )
 from .enrich import apply_merge, concat_tables, vlookup_join
+from .mapping_suggest import MappingSuggestion, suggest_mapping
+from .verify import (
+    VerificationResult,
+    build_verification,
+    build_verification_table,
+    build_verification_xlsx,
+)
 from .io import (
     EncodingWriteError,
     SUPPORTED_DELIMITERS,
