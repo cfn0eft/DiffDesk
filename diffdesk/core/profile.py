@@ -5,9 +5,9 @@ import json
 import re
 from pathlib import Path
 
-from .model import CsvToolError, Profile
+from .model import DiffDeskError, Profile
 
-DEFAULT_PROFILE_DIR = Path.home() / ".csvtool" / "profiles"
+DEFAULT_PROFILE_DIR = Path.home() / ".diffdesk" / "profiles"
 
 _NAME_RE = re.compile(r"^[\w\-ぁ-んァ-ヶ一-龠々ー]{1,64}$")
 
@@ -20,13 +20,13 @@ def profile_from_json(text: str) -> Profile:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
-        raise CsvToolError(f"プロファイルのJSONが不正です: {e}")
+        raise DiffDeskError(f"プロファイルのJSONが不正です: {e}")
     return Profile.from_dict(data)
 
 
 def _safe_path(name: str, directory: Path) -> Path:
     if not _NAME_RE.match(name):
-        raise CsvToolError(
+        raise DiffDeskError(
             "プロファイル名には英数字・ひらがな・カタカナ・漢字・-・_ のみ使えます(64文字まで)。",
             name=name,
         )
@@ -49,7 +49,7 @@ def load_profile(name_or_path: str, *, directory: Path | None = None) -> Profile
     else:
         path = _safe_path(name_or_path, directory)
     if not path.exists():
-        raise CsvToolError(f"プロファイルが見つかりません: {name_or_path}")
+        raise DiffDeskError(f"プロファイルが見つかりません: {name_or_path}")
     return profile_from_json(path.read_text(encoding="utf-8"))
 
 

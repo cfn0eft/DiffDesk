@@ -1,11 +1,11 @@
 """CLI: GUIなしで差分・アップサートCSV生成等をバッチ実行する。
 
 例:
-    python -m csvtool diff master.xlsx sf.csv --profile 月次照合 --report report.csv
-    python -m csvtool upsert master.csv sf.csv --profile p.json --out upsert.csv
-    python -m csvtool convert in.csv --out out.csv --encoding cp932
-    python -m csvtool validate in.csv --keys 社員番号 --required 氏名 メール
-    python -m csvtool concat a.csv b.csv --out merged.csv
+    python -m diffdesk diff master.xlsx sf.csv --profile 月次照合 --report report.csv
+    python -m diffdesk upsert master.csv sf.csv --profile p.json --out upsert.csv
+    python -m diffdesk convert in.csv --out out.csv --encoding cp932
+    python -m diffdesk validate in.csv --keys 社員番号 --required 氏名 メール
+    python -m diffdesk concat a.csv b.csv --out merged.csv
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 from .core import (
-    CsvToolError,
+    DiffDeskError,
     build_delete_table,
     build_report_table,
     build_sdl,
@@ -39,7 +39,7 @@ def _load(path: str, *, encoding: str | None = None, sheet: str | None = None,
           header_row: int = 1):
     p = Path(path)
     if not p.exists():
-        raise CsvToolError(f"ファイルが見つかりません: {path}")
+        raise DiffDeskError(f"ファイルが見つかりません: {path}")
     return load_table(p.read_bytes(), p.name, encoding=encoding, sheet=sheet,
                       header_row=header_row - 1)
 
@@ -102,14 +102,14 @@ def cmd_upsert(args) -> int:
     profile, result = _run_diff_common(args)
     ext = args.external_id or profile.external_id
     if not ext:
-        raise CsvToolError("外部ID列を --external-id かプロファイルで指定してください。")
+        raise DiffDeskError("外部ID列を --external-id かプロファイルで指定してください。")
     include = set()
     if not args.no_insert:
         include.add("only_a")
     if not args.no_update:
         include.add("changed")
     if not include:
-        raise CsvToolError("--no-insert と --no-update を同時には指定できません。")
+        raise DiffDeskError("--no-insert と --no-update を同時には指定できません。")
     t = build_upsert_table(result, external_id_col_a=ext, include=include)
     _write_out(t, args.out, args.out_encoding)
     if args.delete_out:
@@ -157,7 +157,7 @@ def cmd_concat(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="csvtool",
+        prog="diffdesk",
         description="CSV/Excelの比較・変換・Data Loader用CSV生成(引数なしでWebアプリ起動)",
     )
     sub = parser.add_subparsers(dest="command")
@@ -222,7 +222,7 @@ def run_cli(argv: list[str]) -> int:
         return 2
     try:
         return args.func(args)
-    except CsvToolError as e:
+    except DiffDeskError as e:
         print(f"エラー: {e.message}", file=sys.stderr)
         if e.details.get("locations"):
             for loc in e.details["locations"][:10]:

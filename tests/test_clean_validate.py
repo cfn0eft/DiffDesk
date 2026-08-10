@@ -1,7 +1,7 @@
 import pytest
 
-from csvtool.core import (
-    CsvToolError,
+from diffdesk.core import (
+    DiffDeskError,
     Table,
     ValidationRules,
     clean_columns,
@@ -57,7 +57,7 @@ class TestClean:
         assert n == 1
 
     def test_unknown_op(self):
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             clean_columns(Table(columns=["v"], rows=[]), ["v"], ["nope"])
 
 
@@ -90,6 +90,6 @@ class TestValidate:
         assert len(issues) == 2
 
     def test_unknown_format(self):
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             validate_table(Table(columns=["v"], rows=[]),
                            ValidationRules(formats={"v": "nope"}))

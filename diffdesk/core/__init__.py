@@ -1,4 +1,4 @@
-"""csvtool.core — web非依存の純Pythonコアロジック。
+"""diffdesk.core — web非依存の純Pythonコアロジック。
 
 このパッケージはCLI・スクリプト・他UIからそのまま再利用できる。
 fastapi等のwebライブラリをimportしてはならない。
@@ -34,7 +34,7 @@ from .io import (
 from .model import (
     CellDiff,
     ColumnPair,
-    CsvToolError,
+    DiffDeskError,
     DiffOptions,
     DiffResult,
     FilterCondition,

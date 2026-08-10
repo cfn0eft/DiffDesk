@@ -1,9 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import csvtool.core.profile as profile_mod
-from csvtool.web.app import create_app
-from csvtool.web.sessions import SessionStore
+import diffdesk.core.profile as profile_mod
+from diffdesk.web.app import create_app
+from diffdesk.web.sessions import SessionStore
 from tests.conftest import load_fixture
 
 
@@ -11,8 +11,8 @@ from tests.conftest import load_fixture
 def client(monkeypatch, tmp_path):
     monkeypatch.setattr(profile_mod, "DEFAULT_PROFILE_DIR", tmp_path / "profiles")
     # ストアをテストごとに初期化
-    import csvtool.web.routes as routes_mod
-    import csvtool.web.sessions as sessions_mod
+    import diffdesk.web.routes as routes_mod
+    import diffdesk.web.sessions as sessions_mod
     fresh = SessionStore()
     monkeypatch.setattr(sessions_mod, "store", fresh)
     monkeypatch.setattr(routes_mod, "store", fresh)

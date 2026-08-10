@@ -1,4 +1,4 @@
-"""APIエンドポイント。ロジックは全て csvtool.core に委譲する。"""
+"""APIエンドポイント。ロジックは全て diffdesk.core に委譲する。"""
 from __future__ import annotations
 
 import unicodedata
@@ -140,8 +140,8 @@ def parse_file(file_id: str, req: sc.ParseRequest):
 
 
 def raise_no_raw():
-    from ..core import CsvToolError
-    raise CsvToolError("このファイルは生成データのため再パースできません。")
+    from ..core import DiffDeskError
+    raise DiffDeskError("このファイルは生成データのため再パースできません。")
 
 
 @router.get("/files")

@@ -5,7 +5,7 @@ import threading
 import uuid
 from dataclasses import dataclass, field
 
-from ..core import CsvToolError, DiffResult, Table
+from ..core import DiffDeskError, DiffResult, Table
 
 MAX_FILE_BYTES = 100 * 1024 * 1024  # 100MB
 
@@ -28,7 +28,7 @@ class SessionStore:
     # ---- files
     def add_file(self, filename: str, raw: bytes) -> FileEntry:
         if len(raw) > MAX_FILE_BYTES:
-            raise CsvToolError(
+            raise DiffDeskError(
                 f"ファイルが大きすぎます({len(raw) // (1024 * 1024)}MB)。上限は100MBです。")
         entry = FileEntry(file_id=uuid.uuid4().hex[:12], filename=filename, raw=raw)
         with self._lock:
@@ -38,13 +38,13 @@ class SessionStore:
     def get_file(self, file_id: str) -> FileEntry:
         entry = self._files.get(file_id)
         if entry is None:
-            raise CsvToolError(f"ファイルが見つかりません(再アップロードしてください): {file_id}")
+            raise DiffDeskError(f"ファイルが見つかりません(再アップロードしてください): {file_id}")
         return entry
 
     def get_table(self, file_id: str) -> Table:
         entry = self.get_file(file_id)
         if entry.table is None:
-            raise CsvToolError("ファイルが未パースです。先に読み込み設定を確定してください。")
+            raise DiffDeskError("ファイルが未パースです。先に読み込み設定を確定してください。")
         return entry.table
 
     def set_table(self, file_id: str, table: Table, params: dict | None = None) -> None:
@@ -79,7 +79,7 @@ class SessionStore:
     def get_diff(self, diff_id: str) -> DiffResult:
         result = self._diffs.get(diff_id)
         if result is None:
-            raise CsvToolError(f"差分結果が見つかりません(再実行してください): {diff_id}")
+            raise DiffDeskError(f"差分結果が見つかりません(再実行してください): {diff_id}")
         return result
 
 
