@@ -2,8 +2,221 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>csvtool</title>
-<p>placeholder — フロントエンドは後続コミットで実装</p>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>csvtool — CSV比較・編集ツール</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/style.css">
 </head>
-<body></body>
+<body>
+<header>
+  <h1>csvtool</h1>
+  <nav id="tabs">
+    <button data-tab="tab-load" class="active">1. ファイル読み込み</button>
+    <button data-tab="tab-map">2. 列マッピング</button>
+    <button data-tab="tab-diff">3. 差分結果</button>
+    <button data-tab="tab-grid">4. グリッド編集</button>
+  </nav>
+</header>
+
+<main>
+<!-- ============================ タブ1: 読み込み ============================ -->
+<section id="tab-load" class="tab active">
+  <div class="two-col">
+    <div class="card" id="card-a">
+      <h2>ファイルA <span class="hint">(正マスタ / 元のExcel)</span></h2>
+      <div class="dropzone" data-side="a">
+        ここにファイルをドロップ<br>または <label class="filebtn">ファイルを選択<input type="file" data-side="a" hidden></label>
+        <div class="hint">CSV / TSV / Excel(.xlsx)</div>
+      </div>
+      <div class="parse-panel" data-side="a" hidden></div>
+      <div class="preview" data-side="a"></div>
+    </div>
+    <div class="card" id="card-b">
+      <h2>ファイルB <span class="hint">(比較対象 / Salesforceエクスポート)</span></h2>
+      <div class="dropzone" data-side="b">
+        ここにファイルをドロップ<br>または <label class="filebtn">ファイルを選択<input type="file" data-side="b" hidden></label>
+        <div class="hint">CSV / TSV / Excel(.xlsx)</div>
+      </div>
+      <div class="parse-panel" data-side="b" hidden></div>
+      <div class="preview" data-side="b"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>読み込み済みファイル・ユーティリティ</h2>
+    <div id="file-list"></div>
+    <div class="toolbar">
+      <button id="btn-concat">選択ファイルを縦に結合</button>
+      <button id="btn-dedupe">選択ファイルの完全重複行を削除</button>
+      <button id="btn-convert">選択ファイルをエンコーディング変換してダウンロード</button>
+      <select id="convert-encoding">
+        <option value="utf-8-sig">UTF-8 (BOM付き)</option>
+        <option value="utf-8">UTF-8</option>
+        <option value="cp932">CP932 (Shift_JIS)</option>
+      </select>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ タブ2: マッピング ============================ -->
+<section id="tab-map" class="tab">
+  <div class="card">
+    <h2>列マッピング <span class="hint">A列 ↔ B列 の対応と、紐づけキーを指定</span></h2>
+    <div class="toolbar">
+      <button id="btn-automap">自動対応付け</button>
+      <button id="btn-add-pair">＋ ペアを追加</button>
+      <span class="spacer"></span>
+      <label>プロファイル:
+        <select id="profile-select"><option value="">(選択)</option></select>
+      </label>
+      <button id="btn-profile-load">読込</button>
+      <input id="profile-name" placeholder="プロファイル名" size="12">
+      <button id="btn-profile-save">保存</button>
+      <button id="btn-profile-delete" class="danger">削除</button>
+    </div>
+    <table class="mapping-table" id="mapping-table">
+      <thead><tr><th>A列(マスタ)</th><th></th><th>B列(比較対象)</th><th>キー</th><th>SF項目名(出力用)</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <h2>比較オプション</h2>
+      <label><input type="checkbox" id="opt-trim" checked> 前後の空白を無視</label>
+      <label><input type="checkbox" id="opt-width" checked> 全角/半角を同一視(NFKC)</label>
+      <label><input type="checkbox" id="opt-case"> 大文字/小文字を無視</label>
+      <label>数値の許容誤差: <input type="number" id="opt-tolerance" step="any" min="0" placeholder="なし" size="8"></label>
+    </div>
+    <div class="card">
+      <h2>行フィルタ <span class="hint">(比較前の絞り込み・任意)</span></h2>
+      <div>
+        <h3>ファイルA <button class="mini" id="btn-add-filter-a">＋条件</button></h3>
+        <div id="filters-a"></div>
+        <h3>ファイルB <button class="mini" id="btn-add-filter-b">＋条件</button></h3>
+        <div id="filters-b"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actionbar">
+    <button id="btn-run-diff" class="primary big">差分を実行 ▶</button>
+  </div>
+</section>
+
+<!-- ============================ タブ3: 差分結果 ============================ -->
+<section id="tab-diff" class="tab">
+  <div id="diff-empty" class="card"><p>まだ差分を実行していません。「2. 列マッピング」から実行してください。</p></div>
+  <div id="diff-body" hidden>
+    <div id="summary-cards" class="cards"></div>
+    <div id="diff-warnings"></div>
+    <div class="card">
+      <div class="toolbar">
+        <span>表示:</span>
+        <button class="statusfilter active" data-status="">全て</button>
+        <button class="statusfilter" data-status="only_a">Aのみ</button>
+        <button class="statusfilter" data-status="only_b">Bのみ</button>
+        <button class="statusfilter" data-status="changed">変更</button>
+        <button class="statusfilter" data-status="same">一致</button>
+        <span class="spacer"></span>
+        <span id="diff-page-info"></span>
+        <button id="diff-prev">前へ</button>
+        <button id="diff-next">次へ</button>
+      </div>
+      <div class="scroll-x"><table id="diff-table"></table></div>
+      <p class="hint">変更セルは「A側の値 → B側の値」。マージで採用する側をクリックで選択できます(既定はA)。</p>
+    </div>
+    <div class="card">
+      <h2>出力</h2>
+      <div class="toolbar wrap">
+        <button id="btn-export-upsert" class="primary">Data Loader用アップサートCSV</button>
+        <button id="btn-export-delete" class="danger">削除用CSV (Bのみ行)</button>
+        <button id="btn-export-sdl">.sdlマッピング</button>
+        <button id="btn-export-report-csv">差分レポートCSV</button>
+        <button id="btn-export-report-xlsx">差分レポートExcel(色付き)</button>
+        <span class="spacer"></span>
+        <label><input type="checkbox" id="merge-include-b"> Bのみ行も含める</label>
+        <button id="btn-merge">マージ結果を新規ファイル化</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ タブ4: グリッド編集 ============================ -->
+<section id="tab-grid" class="tab">
+  <div class="card">
+    <div class="toolbar">
+      <label>編集するファイル:
+        <select id="grid-file-select"><option value="">(選択)</option></select>
+      </label>
+      <button id="grid-reload">読み込み</button>
+      <span class="spacer"></span>
+      <button id="grid-undo" title="元に戻す">↩ 元に戻す</button>
+      <button id="grid-save" class="primary">サーバーに保存</button>
+      <button id="grid-export">ダウンロード</button>
+      <select id="grid-export-encoding">
+        <option value="utf-8-sig">UTF-8 (BOM付き)</option>
+        <option value="utf-8">UTF-8</option>
+        <option value="cp932">CP932 (Shift_JIS)</option>
+        <option value="xlsx">Excel (.xlsx)</option>
+      </select>
+    </div>
+    <div class="toolbar wrap">
+      <button id="grid-add-row">＋行追加</button>
+      <button id="grid-del-rows" class="danger">選択行を削除</button>
+      <button id="grid-add-col">＋列追加</button>
+      <span class="hint">列名はヘッダーをダブルクリックで変更。列の削除はヘッダーの×。</span>
+    </div>
+    <details class="card sub">
+      <summary>検索・置換</summary>
+      <div class="toolbar wrap">
+        <input id="sr-query" placeholder="検索文字列">
+        <input id="sr-replace" placeholder="置換後">
+        <label><input type="checkbox" id="sr-regex"> 正規表現</label>
+        <label><input type="checkbox" id="sr-case" checked> 大文字小文字を区別</label>
+        <select id="sr-column"><option value="">全列</option></select>
+        <button id="sr-find">検索</button>
+        <button id="sr-do" class="primary">全て置換</button>
+        <span id="sr-result" class="hint"></span>
+      </div>
+    </details>
+    <details class="card sub">
+      <summary>一括クレンジング</summary>
+      <div class="toolbar wrap">
+        <select id="clean-column" multiple size="4"></select>
+        <div id="clean-ops"></div>
+        <button id="clean-do" class="primary">適用</button>
+        <span id="clean-result" class="hint"></span>
+      </div>
+    </details>
+    <details class="card sub">
+      <summary>検証(重複・必須・形式)</summary>
+      <div class="toolbar wrap">
+        <label>キー列(重複チェック): <select id="val-keys" multiple size="3"></select></label>
+        <label>必須列: <select id="val-required" multiple size="3"></select></label>
+        <label>形式: <select id="val-format-col"><option value="">(列)</option></select>
+          <select id="val-format-kind">
+            <option value="email">メール</option><option value="phone">電話</option>
+            <option value="number">数値</option><option value="date_iso">日付(yyyy-MM-dd)</option>
+          </select></label>
+        <button id="val-do" class="primary">検証実行</button>
+      </div>
+      <div id="val-result"></div>
+    </details>
+    <div id="grid-status" class="hint"></div>
+    <div class="toolbar">
+      <span id="grid-page-info"></span>
+      <button id="grid-prev">前へ</button>
+      <button id="grid-next">次へ</button>
+    </div>
+    <div class="scroll-x"><div id="grid-container"></div></div>
+  </div>
+</section>
+</main>
+
+<div id="toast" hidden></div>
+<dialog id="dialog"></dialog>
+
+<script type="module" src="/static/app.js"></script>
+</body>
 </html>
