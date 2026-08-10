@@ -35,7 +35,24 @@ export function renderDiff() {
   currentOffset = 0;
   $$(".statusfilter").forEach(b =>
     b.classList.toggle("active", b.dataset.status === ""));
+  renderStatusbar();
   loadRows();
+}
+
+function renderStatusbar() {
+  const d = state.diff;
+  const keys = d.columns_a.filter((c, i) => d.key_flags[i]);
+  const norms = [];
+  if ($("#opt-trim").checked) norms.push("空白除去");
+  if ($("#opt-width").checked) norms.push("全半角同一視");
+  if ($("#opt-case").checked) norms.push("大小文字同一視");
+  if ($("#opt-tolerance").value) norms.push(`許容誤差${$("#opt-tolerance").value}`);
+  const total = d.summary.only_a + d.summary.only_b + d.summary.changed + d.summary.same;
+  $("#diff-statusbar").innerHTML =
+    `<span>${total}件</span>` +
+    `<span>キー: ${escapeHtml(keys.join(" + "))}</span>` +
+    `<span>正規化: ${norms.length ? norms.join("・") : "なし"}</span>` +
+    `<span class="right">準備完了</span>`;
 }
 
 async function loadRows() {
