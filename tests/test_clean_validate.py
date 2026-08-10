@@ -20,6 +20,18 @@ class TestClean:
         t, _ = clean_columns(t, ["v"], ["zen2han"])
         assert t.rows[0][0] == "ABC123カナ"
 
+    def test_alnum_han_only_ascii(self):
+        # 全角英数記号と全角スペースだけ半角化。カナ・漢字・①㈱は不変
+        t = Table(columns=["v"], rows=[["ＡＢＣ１２３　カナ漢字ｶﾅ①㈱ー（株）"]])
+        t, n = clean_columns(t, ["v"], ["alnum_han"])
+        assert t.rows[0][0] == "ABC123 カナ漢字ｶﾅ①㈱ー(株)"
+        assert n == 1
+
+    def test_alnum_han_no_change(self):
+        t = Table(columns=["v"], rows=[["ASCII only 123"]])
+        t, n = clean_columns(t, ["v"], ["alnum_han"])
+        assert n == 0
+
     def test_han2zen(self):
         t = Table(columns=["v"], rows=[["ABC123"]])
         t, _ = clean_columns(t, ["v"], ["han2zen"])
