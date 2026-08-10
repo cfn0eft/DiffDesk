@@ -1,0 +1,5 @@
+Id,Name,Email,Department__c,EmployeeNumber__c
+a01000000000001,山田太郎,taro@example.com,営業部,0001
+a01000000000002,鈴木花子,hanako-new@example.com,開発部,0002
+a01000000000003,佐藤次郎,jiro@example.com,人事部,0003
+a01000000000006,伊藤六郎,rokuro@example.com,営業部,0006
