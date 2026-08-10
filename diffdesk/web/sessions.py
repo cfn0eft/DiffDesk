@@ -69,11 +69,15 @@ class SessionStore:
     def list_files(self) -> list[FileEntry]:
         return list(self._files.values())
 
+    MAX_DIFFS = 5  # 大規模データでのメモリ肥大防止(古い差分結果から破棄)
+
     # ---- diffs
     def add_diff(self, result: DiffResult) -> str:
         diff_id = uuid.uuid4().hex[:12]
         with self._lock:
             self._diffs[diff_id] = result
+            while len(self._diffs) > self.MAX_DIFFS:
+                self._diffs.pop(next(iter(self._diffs)))
         return diff_id
 
     def get_diff(self, diff_id: str) -> DiffResult:

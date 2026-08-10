@@ -16,12 +16,35 @@ const grid = {
   undoStack: [],
 };
 
-function snapshot() {
-  grid.undoStack.push({
-    columns: [...grid.columns],
-    rows: grid.rows.map(r => [...r]),
-  });
+// undoは表全体のコピーではなく操作の逆変換だけを記録する(大規模データ対応)
+function pushUndo(entry) {
+  grid.undoStack.push(entry);
   if (grid.undoStack.length > UNDO_LIMIT) grid.undoStack.shift();
+}
+
+function applyUndo(e) {
+  switch (e.type) {
+    case "cell":
+      grid.rows[e.row][e.col] = e.old;
+      break;
+    case "delrows":  // 追加した行を取り消す
+      [...e.indices].sort((a, b) => b - a).forEach(i => grid.rows.splice(i, 1));
+      break;
+    case "insrows":  // 削除した行を元の位置に戻す
+      e.items.forEach(([i, row]) => grid.rows.splice(i, 0, row));
+      break;
+    case "delcol":   // 追加した列を取り消す
+      grid.columns.splice(e.index, 1);
+      grid.rows.forEach(r => r.splice(e.index, 1));
+      break;
+    case "inscol":   // 削除した列を元に戻す
+      grid.columns.splice(e.index, 0, e.name);
+      grid.rows.forEach((r, ri) => r.splice(e.index, 0, e.values[ri] ?? ""));
+      break;
+    case "rename":
+      grid.columns[e.index] = e.old;
+      break;
+  }
 }
 
 function markDirty() {
@@ -93,7 +116,8 @@ function renderGrid() {
     inp.onfocus = () => { inp.dataset.orig = inp.value; };
     inp.onchange = () => {
       if (inp.value !== inp.dataset.orig) {
-        snapshot();
+        pushUndo({ type: "cell", row: +inp.dataset.row, col: +inp.dataset.col,
+                   old: inp.dataset.orig });
         grid.rows[+inp.dataset.row][+inp.dataset.col] = inp.value;
         markDirty();
       }
@@ -108,7 +132,7 @@ function renderGrid() {
       const name = $("#rename-col").value.trim();
       if (!name) return toast("列名が空です", true);
       if (name !== grid.columns[i] && grid.columns.includes(name)) return toast("列名が重複しています", true);
-      snapshot();
+      pushUndo({ type: "rename", index: i, old: grid.columns[i] });
       grid.columns[i] = name;
       markDirty();
       renderGrid();
@@ -119,7 +143,8 @@ function renderGrid() {
     el.onclick = async () => {
       const i = +el.dataset.col;
       if (!await showDialog(`<h2>列の削除</h2><p>列「${escapeHtml(grid.columns[i])}」を削除しますか?</p>`)) return;
-      snapshot();
+      pushUndo({ type: "inscol", index: i, name: grid.columns[i],
+                 values: grid.rows.map(r => r[i]) });
       grid.columns.splice(i, 1);
       grid.rows.forEach(r => r.splice(i, 1));
       markDirty();
@@ -150,10 +175,9 @@ export function initGrid() {
   };
 
   $("#grid-undo").onclick = () => {
-    const prev = grid.undoStack.pop();
-    if (!prev) return toast("これ以上戻せません", true);
-    grid.columns = prev.columns;
-    grid.rows = prev.rows;
+    const entry = grid.undoStack.pop();
+    if (!entry) return toast("これ以上戻せません", true);
+    applyUndo(entry);
     markDirty();
     renderGrid();
     fillColumnSelectors();
@@ -190,7 +214,7 @@ export function initGrid() {
 
   $("#grid-add-row").onclick = () => {
     if (!grid.fileId) return;
-    snapshot();
+    pushUndo({ type: "delrows", indices: [grid.rows.length] });
     grid.rows.push(new Array(grid.columns.length).fill(""));
     grid.page = Math.floor((grid.rows.length - 1) / PAGE_SIZE);
     markDirty();
@@ -200,8 +224,9 @@ export function initGrid() {
   $("#grid-del-rows").onclick = () => {
     const checked = $$(".rowcheck:checked").map(c => +c.dataset.row);
     if (!checked.length) return toast("削除する行にチェックを入れてください", true);
-    snapshot();
     const drop = new Set(checked);
+    pushUndo({ type: "insrows",
+               items: checked.sort((a, b) => a - b).map(i => [i, grid.rows[i]]) });
     grid.rows = grid.rows.filter((_, i) => !drop.has(i));
     markDirty();
     renderGrid();
@@ -213,7 +238,7 @@ export function initGrid() {
     if (!ok) return;
     const name = $("#new-col-name").value.trim() || `列${grid.columns.length + 1}`;
     if (grid.columns.includes(name)) return toast("列名が重複しています", true);
-    snapshot();
+    pushUndo({ type: "delcol", index: grid.columns.length });
     grid.columns.push(name);
     grid.rows.forEach(r => r.push(""));
     markDirty();
@@ -257,7 +282,6 @@ export function initGrid() {
   $("#sr-do").onclick = async () => {
     if (!await ensureSaved()) return;
     try {
-      snapshot();
       const col = $("#sr-column").value;
       const r = await postJson(`/api/files/${grid.fileId}/replace`, {
         query: $("#sr-query").value,

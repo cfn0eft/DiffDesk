@@ -49,6 +49,7 @@ main { padding: 10px; max-width: 1400px; margin: 0 auto; }
 .tab { display: none; }
 .tab.active { display: block; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.two-col > * { min-width: 0; } /* 幅広テーブルでカラムが膨張しないように */
 @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
 
 /* ---------------- パネル(旧カード) ---------------- */
@@ -95,9 +96,8 @@ label { margin-right: 8px; display: inline-flex; align-items: center; gap: 4px; 
 .card > label { display: block; margin: 5px 0; }
 
 .toolbar {
-  display: flex; align-items: center; gap: 6px; margin: 6px 0; flex-wrap: nowrap;
+  display: flex; align-items: center; gap: 6px; margin: 6px 0; flex-wrap: wrap;
 }
-.toolbar.wrap { flex-wrap: wrap; }
 .spacer { flex: 1; }
 .actionbar { text-align: center; margin: 14px 0; }
 
@@ -112,6 +112,11 @@ tbody tr:nth-child(even) td { background: #faf9f6; }
 .scroll-x { overflow-x: auto; max-height: 65vh; overflow-y: auto; border: 1px solid var(--border); }
 .preview table { font-size: 12px; }
 .preview { max-height: 280px; overflow: auto; margin-top: 6px; border: 1px solid var(--border); }
+/* 極端に長い値はセル内で省略(内部スクロールの暴走防止) */
+.preview td, .preview th, #diff-table td, #file-list td {
+  max-width: 420px; overflow: hidden; text-overflow: ellipsis;
+}
+#file-list { overflow-x: auto; }
 
 .parse-panel {
   background: #f1eee7; border: 1px solid var(--border); border-radius: 0;
