@@ -23,8 +23,23 @@
 
 Python 3.10 以上が必要です。
 
+### かんたんインストール(GitHubから直接)
+
 ```bash
-# 推奨: バージョン固定+SHA256ハッシュ検証付き(改ざんされた配布物はインストールに失敗します)
+pip install "csvtool @ git+https://github.com/cfn0eft/CSV-.git"
+csvtool   # ← これだけで起動(ブラウザが自動で開きます)
+```
+
+特定バージョンに固定したい場合はタグやコミットSHAを付けます:
+`pip install "csvtool @ git+https://github.com/cfn0eft/CSV-.git@v0.1.0"`
+
+### 厳格インストール(ハッシュ検証付き・推奨)
+
+リポジトリを取得したうえで、依存を全バージョン固定+SHA256検証付きで導入します
+(改ざんされた配布物はインストールに失敗します):
+
+```bash
+git clone https://github.com/cfn0eft/CSV-.git && cd CSV-
 pip install --require-hashes --only-binary :all: -r requirements.txt
 pip install --no-deps -e .
 
