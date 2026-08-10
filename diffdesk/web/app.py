@@ -7,18 +7,18 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..core import CsvToolError, EncodingWriteError
+from ..core import DiffDeskError, EncodingWriteError
 from .routes import router
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="csvtool", docs_url="/docs")
+    app = FastAPI(title="diffdesk", docs_url="/docs")
     app.include_router(router)
 
-    @app.exception_handler(CsvToolError)
-    async def handle_csvtool_error(request: Request, exc: CsvToolError):
+    @app.exception_handler(DiffDeskError)
+    async def handle_diffdesk_error(request: Request, exc: DiffDeskError):
         payload = {"error": {"code": getattr(exc, "code", "error"),
                              "message": exc.message}}
         if isinstance(exc, EncodingWriteError):

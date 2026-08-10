@@ -12,7 +12,7 @@ FILTER_OPS = (
 )
 
 
-class CsvToolError(Exception):
+class DiffDeskError(Exception):
     """ユーザーに提示可能なエラーの基底クラス。"""
 
     code = "error"
@@ -37,7 +37,7 @@ class Table:
         try:
             return self.columns.index(column)
         except ValueError:
-            raise CsvToolError(f"列が見つかりません: {column}", column=column)
+            raise DiffDeskError(f"列が見つかりません: {column}", column=column)
 
     def copy(self) -> "Table":
         return Table(
@@ -122,17 +122,17 @@ class MappingConfig:
 
     def validate(self, columns_a: list[str], columns_b: list[str]) -> None:
         if not self.pairs:
-            raise CsvToolError("列マッピングが空です。少なくとも1組の対応付けが必要です。")
+            raise DiffDeskError("列マッピングが空です。少なくとも1組の対応付けが必要です。")
         if not self.key_pairs:
-            raise CsvToolError("キー列が指定されていません。1組以上のペアにキー指定が必要です。")
+            raise DiffDeskError("キー列が指定されていません。1組以上のペアにキー指定が必要です。")
         seen: set[tuple[str, str]] = set()
         for p in self.pairs:
             if p.col_a not in columns_a:
-                raise CsvToolError(f"ファイルAに列がありません: {p.col_a}", column=p.col_a)
+                raise DiffDeskError(f"ファイルAに列がありません: {p.col_a}", column=p.col_a)
             if p.col_b not in columns_b:
-                raise CsvToolError(f"ファイルBに列がありません: {p.col_b}", column=p.col_b)
+                raise DiffDeskError(f"ファイルBに列がありません: {p.col_b}", column=p.col_b)
             if (p.col_a, p.col_b) in seen:
-                raise CsvToolError(f"同じ対応付けが重複しています: {p.col_a} ↔ {p.col_b}")
+                raise DiffDeskError(f"同じ対応付けが重複しています: {p.col_a} ↔ {p.col_b}")
             seen.add((p.col_a, p.col_b))
 
     def to_dict(self) -> dict:
@@ -179,7 +179,7 @@ class FilterCondition:
     def from_dict(cls, d: dict) -> "FilterCondition":
         op = str(d.get("op", "eq"))
         if op not in FILTER_OPS:
-            raise CsvToolError(f"不明なフィルタ条件です: {op}", op=op)
+            raise DiffDeskError(f"不明なフィルタ条件です: {op}", op=op)
         return cls(column=str(d["column"]), op=op, value=str(d.get("value", "")))
 
 
@@ -282,7 +282,7 @@ class Profile:
     @classmethod
     def from_dict(cls, d: dict) -> "Profile":
         if not isinstance(d, dict) or "mapping" not in d:
-            raise CsvToolError("プロファイルの形式が不正です(mappingがありません)。")
+            raise DiffDeskError("プロファイルの形式が不正です(mappingがありません)。")
         return cls(
             name=str(d.get("name", "")),
             mapping=MappingConfig.from_dict(d["mapping"]),

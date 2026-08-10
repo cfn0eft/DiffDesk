@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import re
 
-from .model import CsvToolError, Table
+from .model import DiffDeskError, Table
 
 
 def set_cell(table: Table, row: int, col: int, value: str) -> Table:
     if not (0 <= row < len(table.rows)) or not (0 <= col < len(table.columns)):
-        raise CsvToolError(f"セル位置が範囲外です: 行{row + 1} 列{col + 1}")
+        raise DiffDeskError(f"セル位置が範囲外です: 行{row + 1} 列{col + 1}")
     table.rows[row][col] = str(value)
     return table
 
@@ -31,7 +31,7 @@ def delete_rows(table: Table, indices: list[int]) -> Table:
 def insert_column(table: Table, name: str, at: int | None = None) -> Table:
     name = name.strip() or f"列{len(table.columns) + 1}"
     if name in table.columns:
-        raise CsvToolError(f"列名が重複しています: {name}", column=name)
+        raise DiffDeskError(f"列名が重複しています: {name}", column=name)
     pos = len(table.columns) if at is None else min(max(at, 0), len(table.columns))
     table.columns.insert(pos, name)
     for row in table.rows:
@@ -50,9 +50,9 @@ def delete_column(table: Table, name: str) -> Table:
 def rename_column(table: Table, old: str, new: str) -> Table:
     new = new.strip()
     if not new:
-        raise CsvToolError("新しい列名が空です。")
+        raise DiffDeskError("新しい列名が空です。")
     if new != old and new in table.columns:
-        raise CsvToolError(f"列名が重複しています: {new}", column=new)
+        raise DiffDeskError(f"列名が重複しています: {new}", column=new)
     table.columns[table.col_index(old)] = new
     return table
 
@@ -69,7 +69,7 @@ def search_cells(table: Table, query: str, *, columns: list[str] | None = None,
         try:
             pattern = re.compile(query, 0 if case_sensitive else re.IGNORECASE)
         except re.error as e:
-            raise CsvToolError(f"正規表現が不正です: {query} ({e})", pattern=query)
+            raise DiffDeskError(f"正規表現が不正です: {query} ({e})", pattern=query)
         match = lambda v: pattern.search(v) is not None
     elif case_sensitive:
         match = lambda v: query in v
@@ -99,7 +99,7 @@ def replace_all(table: Table, query: str, replacement: str, *,
         try:
             pattern = re.compile(query, 0 if case_sensitive else re.IGNORECASE)
         except re.error as e:
-            raise CsvToolError(f"正規表現が不正です: {query} ({e})", pattern=query)
+            raise DiffDeskError(f"正規表現が不正です: {query} ({e})", pattern=query)
         replace = lambda v: pattern.sub(replacement, v)
     elif case_sensitive:
         replace = lambda v: v.replace(query, replacement)

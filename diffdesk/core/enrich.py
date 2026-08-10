@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from .model import (
-    CsvToolError,
+    DiffDeskError,
     DiffOptions,
     DiffResult,
     Table,
@@ -20,9 +20,9 @@ def vlookup_join(table_a: Table, table_b: Table, *,
     Excel の VLOOKUP 相当。B側で同一キーが複数ある場合は最初の行を使う。
     """
     if not key_pairs:
-        raise CsvToolError("キー列の対応付けが指定されていません。")
+        raise DiffDeskError("キー列の対応付けが指定されていません。")
     if not add_columns:
-        raise CsvToolError("付加する列が指定されていません。")
+        raise DiffDeskError("付加する列が指定されていません。")
     options = options or DiffOptions()
     normalizer = make_normalizer(options)
 
@@ -68,12 +68,12 @@ def concat_tables(tables: list[Table], *, mode: str = "union") -> Table:
     mode="strict": 列構成が完全一致しない場合はエラー。
     """
     if not tables:
-        raise CsvToolError("結合するファイルがありません。")
+        raise DiffDeskError("結合するファイルがありません。")
     if mode == "strict":
         base = tables[0].columns
         for t in tables[1:]:
             if t.columns != base:
-                raise CsvToolError(
+                raise DiffDeskError(
                     f"列構成が一致しません: {t.name or '(無名)'}",
                     expected=base, actual=t.columns,
                 )
@@ -85,7 +85,7 @@ def concat_tables(tables: list[Table], *, mode: str = "union") -> Table:
                 if c not in columns:
                     columns.append(c)
     else:
-        raise CsvToolError(f"不明な結合モードです: {mode}", mode=mode)
+        raise DiffDeskError(f"不明な結合モードです: {mode}", mode=mode)
 
     rows: list[list[str]] = []
     for t in tables:
@@ -111,7 +111,7 @@ def apply_merge(diff: DiffResult, choices: list[dict], *,
         col_a = str(ch.get("col_a", ""))
         use = str(ch.get("use", "a"))
         if use not in ("a", "b"):
-            raise CsvToolError(f"採用指定が不正です: {use}(a または b)", use=use)
+            raise DiffDeskError(f"採用指定が不正です: {use}(a または b)", use=use)
         choice_map[(key, col_a)] = use
 
     cols_a = [p.col_a for p in diff.mapping.pairs]

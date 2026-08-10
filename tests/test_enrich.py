@@ -1,8 +1,8 @@
 import pytest
 
-from csvtool.core import (
+from diffdesk.core import (
     ColumnPair,
-    CsvToolError,
+    DiffDeskError,
     DiffOptions,
     MappingConfig,
     Table,
@@ -41,7 +41,7 @@ class TestVlookup:
 
     def test_requires_args(self):
         t = Table(columns=["id"], rows=[])
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             vlookup_join(t, t, key_pairs=[], add_columns=["id"])
 
 
@@ -56,11 +56,11 @@ class TestConcat:
     def test_strict_mismatch(self):
         t1 = Table(columns=["a"], rows=[])
         t2 = Table(columns=["b"], rows=[])
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             concat_tables([t1, t2], mode="strict")
 
     def test_empty(self):
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             concat_tables([])
 
 
@@ -94,6 +94,6 @@ class TestMerge:
         assert ["9", "B側", "x"] in out.rows
 
     def test_bad_choice(self):
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             apply_merge(self.make_diff(),
                         choices=[{"key": ["1"], "col_a": "部署", "use": "c"}])

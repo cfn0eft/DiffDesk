@@ -5,7 +5,7 @@ import re
 import unicodedata
 from typing import Callable
 
-from .model import CsvToolError, Table
+from .model import DiffDeskError, Table
 
 # 半角カナ→全角カナはNFKCで統一されるため、専用テーブルは全角ASCII変換のみ持つ
 _HAN_TO_ZEN_ASCII = {i: i + 0xFEE0 for i in range(0x21, 0x7F)}
@@ -83,7 +83,7 @@ def clean_columns(table: Table, columns: list[str], ops: list[str]) -> tuple[Tab
     funcs = []
     for op in ops:
         if op not in CLEAN_OPS:
-            raise CsvToolError(f"不明なクレンジング操作です: {op}", op=op)
+            raise DiffDeskError(f"不明なクレンジング操作です: {op}", op=op)
         funcs.append(CLEAN_OPS[op][1])
     indices = [table.col_index(c) for c in columns]
     changed = 0

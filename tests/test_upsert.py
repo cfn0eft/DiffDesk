@@ -1,8 +1,8 @@
 import pytest
 
-from csvtool.core import (
+from diffdesk.core import (
     ColumnPair,
-    CsvToolError,
+    DiffDeskError,
     MappingConfig,
     build_delete_table,
     build_report_table,
@@ -44,11 +44,11 @@ class TestUpsert:
         assert len(t.rows) == 2
 
     def test_external_id_must_be_key(self, diff):
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             build_upsert_table(diff, external_id_col_a="氏名")
 
     def test_external_id_must_exist(self, diff):
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             build_upsert_table(diff, external_id_col_a="なし")
 
 
@@ -65,7 +65,7 @@ class TestDelete:
         assert t.rows == [["a01000000000006"]]
 
     def test_missing_id_column(self, diff):
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             build_delete_table(diff, id_col_b="Id")
 
 
@@ -77,7 +77,7 @@ class TestSdl:
 
     def test_sdl_escapes_non_ascii(self):
         m = MappingConfig(pairs=[ColumnPair("番号", "番号", is_key=True)])
-        from csvtool.core import DiffResult, DiffOptions
+        from diffdesk.core import DiffResult, DiffOptions
         d = DiffResult(mapping=m, options=DiffOptions(), rows=[],
                        duplicates_a=[], duplicates_b=[])
         sdl = build_sdl(d)

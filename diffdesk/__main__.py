@@ -13,7 +13,7 @@ def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) 
 
     app = create_app()
     url = f"http://{host}:{port}"
-    print(f"csvtool を起動します: {url}")
+    print(f"DiffDesk を起動します: {url}")
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     uvicorn.run(app, host=host, port=port, log_level="warning")

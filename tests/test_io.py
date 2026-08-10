@@ -1,7 +1,7 @@
 import pytest
 
-from csvtool.core import (
-    CsvToolError,
+from diffdesk.core import (
+    DiffDeskError,
     EncodingWriteError,
     Table,
     detect_delimiter,
@@ -77,7 +77,7 @@ class TestLoadCsv:
         assert len(t.rows) == 5
 
     def test_encoding_override(self, master_cp932):
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             load_csv(master_cp932, encoding="utf-8")
 
     def test_duplicate_and_empty_headers(self):
@@ -115,7 +115,7 @@ class TestExcel:
         assert list_sheets(load_fixture("master.xlsx")) == ["社員マスタ", "タイトル付き"]
 
     def test_unknown_sheet(self):
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             load_excel(load_fixture("master.xlsx"), sheet="なし")
 
     def test_load_table_dispatch(self, master_utf8):

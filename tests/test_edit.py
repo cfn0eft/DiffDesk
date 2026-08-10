@@ -1,7 +1,7 @@
 import pytest
 
-from csvtool.core import (
-    CsvToolError,
+from diffdesk.core import (
+    DiffDeskError,
     Table,
     dedupe_rows,
     delete_column,
@@ -22,7 +22,7 @@ def make_table() -> Table:
 def test_set_cell():
     t = set_cell(make_table(), 0, 1, "z")
     assert t.rows[0][1] == "z"
-    with pytest.raises(CsvToolError):
+    with pytest.raises(DiffDeskError):
         set_cell(t, 9, 0, "v")
 
 
@@ -39,7 +39,7 @@ def test_insert_delete_rename_column():
     assert t.rows[0] == ["1", "", "x"]
     t = rename_column(t, "c", "d")
     assert t.columns[1] == "d"
-    with pytest.raises(CsvToolError):
+    with pytest.raises(DiffDeskError):
         rename_column(t, "d", "a")  # 重複
     t = delete_column(t, "d")
     assert t.columns == ["a", "b"]
@@ -64,7 +64,7 @@ def test_replace_all():
 
 
 def test_replace_bad_regex():
-    with pytest.raises(CsvToolError):
+    with pytest.raises(DiffDeskError):
         replace_all(Table(columns=["v"], rows=[["a"]]), "(", "x", regex=True)
 
 

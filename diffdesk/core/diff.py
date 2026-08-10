@@ -5,7 +5,7 @@ import re
 
 from .model import (
     CellDiff,
-    CsvToolError,
+    DiffDeskError,
     DiffOptions,
     DiffResult,
     FilterCondition,
@@ -39,8 +39,8 @@ def _match_condition(value: str, cond: FilterCondition) -> bool:
         try:
             return re.search(target, v) is not None
         except re.error as e:
-            raise CsvToolError(f"正規表現が不正です: {target} ({e})", pattern=target)
-    raise CsvToolError(f"不明なフィルタ条件です: {cond.op}", op=cond.op)
+            raise DiffDeskError(f"正規表現が不正です: {target} ({e})", pattern=target)
+    raise DiffDeskError(f"不明なフィルタ条件です: {cond.op}", op=cond.op)
 
 
 def apply_filter(table: Table, conditions: list[FilterCondition]) -> Table:

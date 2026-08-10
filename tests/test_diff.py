@@ -1,8 +1,8 @@
 import pytest
 
-from csvtool.core import (
+from diffdesk.core import (
     ColumnPair,
-    CsvToolError,
+    DiffDeskError,
     DiffOptions,
     FilterCondition,
     MappingConfig,
@@ -102,11 +102,11 @@ def test_numeric_tolerance_option():
 def test_mapping_validation():
     a = Table(columns=["x"], rows=[])
     b = Table(columns=["y"], rows=[])
-    with pytest.raises(CsvToolError):
+    with pytest.raises(DiffDeskError):
         diff_tables(a, b, MappingConfig(pairs=[]))
-    with pytest.raises(CsvToolError):
+    with pytest.raises(DiffDeskError):
         diff_tables(a, b, MappingConfig(pairs=[ColumnPair("x", "y")]))  # キーなし
-    with pytest.raises(CsvToolError):
+    with pytest.raises(DiffDeskError):
         diff_tables(a, b, MappingConfig(pairs=[ColumnPair("nope", "y", is_key=True)]))
 
 
@@ -126,7 +126,7 @@ class TestRowFilter:
 
     def test_bad_regex(self):
         t = Table(columns=["v"], rows=[["a"]])
-        with pytest.raises(CsvToolError):
+        with pytest.raises(DiffDeskError):
             apply_filter(t, [FilterCondition("v", "regex", "(")])
 
     def test_filter_in_diff(self, master_utf8, sf_export):

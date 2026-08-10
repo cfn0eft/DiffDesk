@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from csvtool.cli import run_cli
-from csvtool.core import (
+from diffdesk.cli import run_cli
+from diffdesk.core import (
     ColumnPair,
     MappingConfig,
     Profile,
@@ -92,7 +92,7 @@ def test_convert_to_xlsx(fixtures_dir, tmp_path):
     out = tmp_path / "out.xlsx"
     rc = run_cli(["convert", str(fixtures_dir / "master_utf8.csv"), "--out", str(out)])
     assert rc == 0
-    from csvtool.core import load_excel
+    from diffdesk.core import load_excel
     assert load_excel(out.read_bytes()).columns[0] == "氏名"
 
 

@@ -11,7 +11,7 @@ import csv
 import io as _io
 from datetime import date, datetime, time
 
-from .model import CsvToolError, Table
+from .model import DiffDeskError, Table
 
 SUPPORTED_ENCODINGS = ("utf-8-sig", "utf-8", "cp932", "utf-16", "euc_jp")
 SUPPORTED_DELIMITERS = (",", "\t", ";", "|")
@@ -19,7 +19,7 @@ SUPPORTED_DELIMITERS = (",", "\t", ";", "|")
 EXCEL_EXTENSIONS = (".xlsx", ".xlsm", ".xltx")
 
 
-class EncodingWriteError(CsvToolError):
+class EncodingWriteError(DiffDeskError):
     """指定エンコーディングで表現できない文字がある場合のエラー。
 
     details["locations"] に {"row": 1始まり(0=ヘッダー), "column": 列名, "char": 文字}
@@ -66,7 +66,7 @@ def decode_bytes(raw: bytes, encoding: str) -> str:
     try:
         return raw.decode(encoding)
     except (UnicodeDecodeError, LookupError) as e:
-        raise CsvToolError(
+        raise DiffDeskError(
             f"エンコーディング {encoding} でデコードできません: {e}", encoding=encoding
         )
 
@@ -120,7 +120,7 @@ def _dedupe_headers(headers: list[str]) -> list[str]:
 
 def _rows_to_table(all_rows: list[list[str]], header_row: int, name: str) -> Table:
     if header_row < 0 or header_row >= max(len(all_rows), 1):
-        raise CsvToolError(
+        raise DiffDeskError(
             f"ヘッダー行の指定が範囲外です: {header_row + 1}行目 (全{len(all_rows)}行)",
             header_row=header_row,
         )
@@ -141,7 +141,7 @@ def load_csv(raw: bytes, *, name: str = "", encoding: str | None = None,
     text = decode_bytes(raw, enc)
     delim = delimiter or detect_delimiter(text)
     if delim not in SUPPORTED_DELIMITERS:
-        raise CsvToolError(f"未対応の区切り文字です: {delim!r}")
+        raise DiffDeskError(f"未対応の区切り文字です: {delim!r}")
     reader = csv.reader(_io.StringIO(text), delimiter=delim)
     all_rows = [row for row in reader]
     # 末尾の完全空行は落とす
@@ -181,7 +181,7 @@ def list_sheets(raw: bytes) -> list[str]:
     try:
         wb = load_workbook(_io.BytesIO(raw), read_only=True, data_only=True)
     except Exception as e:
-        raise CsvToolError(f"Excelファイルを開けません: {e}")
+        raise DiffDeskError(f"Excelファイルを開けません: {e}")
     try:
         return list(wb.sheetnames)
     finally:
@@ -194,14 +194,14 @@ def load_excel(raw: bytes, *, name: str = "", sheet: str | None = None,
     try:
         wb = load_workbook(_io.BytesIO(raw), read_only=True, data_only=True)
     except Exception as e:
-        raise CsvToolError(f"Excelファイルを開けません: {e}")
+        raise DiffDeskError(f"Excelファイルを開けません: {e}")
     try:
         if sheet is None:
             ws = wb[wb.sheetnames[0]]
         elif sheet in wb.sheetnames:
             ws = wb[sheet]
         else:
-            raise CsvToolError(f"シートが見つかりません: {sheet}", sheet=sheet)
+            raise DiffDeskError(f"シートが見つかりません: {sheet}", sheet=sheet)
         all_rows = [[_excel_cell_to_str(c) for c in row]
                     for row in ws.iter_rows(values_only=True)]
     finally:

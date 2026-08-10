@@ -1,4 +1,4 @@
-from csvtool.core import DiffOptions, make_normalizer, values_equal
+from diffdesk.core import DiffOptions, make_normalizer, values_equal
 
 
 def test_trim_includes_fullwidth_space():

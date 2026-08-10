@@ -1,8 +1,8 @@
 import pytest
 
-from csvtool.core import (
+from diffdesk.core import (
     ColumnPair,
-    CsvToolError,
+    DiffDeskError,
     DiffOptions,
     FilterCondition,
     MappingConfig,
@@ -13,7 +13,7 @@ from csvtool.core import (
     profile_to_json,
     save_profile,
 )
-from csvtool.core.profile import list_profiles
+from diffdesk.core.profile import list_profiles
 
 
 def make_profile() -> Profile:
@@ -57,24 +57,24 @@ def test_load_by_path(tmp_path):
 def test_invalid_name(tmp_path):
     p = make_profile()
     p.name = "../evil"
-    with pytest.raises(CsvToolError):
+    with pytest.raises(DiffDeskError):
         save_profile(p, directory=tmp_path)
 
 
 def test_invalid_json():
-    with pytest.raises(CsvToolError):
+    with pytest.raises(DiffDeskError):
         profile_from_json("{not json")
-    with pytest.raises(CsvToolError):
+    with pytest.raises(DiffDeskError):
         profile_from_json("{}")
 
 
 def test_missing_profile(tmp_path):
-    with pytest.raises(CsvToolError):
+    with pytest.raises(DiffDeskError):
         load_profile("なし", directory=tmp_path)
 
 
 def test_core_is_web_free():
     import subprocess
     import sys
-    code = "import csvtool.core, sys; assert 'fastapi' not in sys.modules; assert 'uvicorn' not in sys.modules"
+    code = "import diffdesk.core, sys; assert 'fastapi' not in sys.modules; assert 'uvicorn' not in sys.modules"
     subprocess.run([sys.executable, "-c", code], check=True, cwd=str(__import__("pathlib").Path(__file__).parent.parent))

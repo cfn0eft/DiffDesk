@@ -1,10 +1,12 @@
-# csvtool — CSV/Excel 比較・編集・Data Loader用CSV生成ツール
+<p align="center"><img src="diffdesk/static/logo.svg" width="380" alt="DiffDesk — CSV/Excel 突き合わせ・編集・Data Loader連携"></p>
+
+# DiffDesk — CSV/Excel 比較・編集・Data Loader用CSV生成ツール
 
 ヘッダーが異なる2つの表データ(例: 元のExcelマスタと Salesforce からエクスポートしたCSV)を
 **任意の列マッピングで紐づけて差分を検出**し、CSVの編集や
 **Salesforce Data Loader 用のアップサート/削除CSV生成**までを行うローカルWebアプリ+CLIです。
 
-- ロジックは純Python(`csvtool/core/`)で、Web以外(CLI・自作スクリプト)からもそのまま使えます
+- ロジックは純Python(`diffdesk/core/`)で、Web以外(CLI・自作スクリプト)からもそのまま使えます
 - LLMは使用していません。すべてローカルで完結し、データが外部に送信されることはありません
 
 ## 主な機能
@@ -17,14 +19,29 @@
 | 編集 | グリッド編集(セル・行・列、undo)、検索・置換(正規表現対応)、一括クレンジング(空白除去・全半角変換・日付をyyyy-MM-ddに統一 等)、検証(キー重複・必須・メール等の形式) |
 | 変換・整形 | VLOOKUP的な列付加(キー照合でB列をAに付加)、複数ファイル縦結合、文字コード一括変換、完全重複行削除、差分マージ(変更セルごとにA/B採用を選択) |
 | 出力 | CSV(UTF-8 / BOM付き / CP932、CRLF)、Excel(.xlsx)、色付きExcel差分レポート、差分レポートCSV |
-| 再利用 | マッピング+オプションのプロファイル保存/読込(`~/.csvtool/profiles/`)。CLIとWebで共用 |
+| 再利用 | マッピング+オプションのプロファイル保存/読込(`~/.diffdesk/profiles/`)。CLIとWebで共用 |
 
 ## インストール
 
 Python 3.10 以上が必要です。
 
+### かんたんインストール(GitHubから直接)
+
 ```bash
-# 推奨: バージョン固定+SHA256ハッシュ検証付き(改ざんされた配布物はインストールに失敗します)
+pip install "diffdesk @ git+https://github.com/cfn0eft/CSV-.git"
+diffdesk   # ← これだけで起動(ブラウザが自動で開きます)
+```
+
+特定バージョンに固定したい場合はタグやコミットSHAを付けます:
+`pip install "diffdesk @ git+https://github.com/cfn0eft/CSV-.git@v0.1.0"`
+
+### 厳格インストール(ハッシュ検証付き・推奨)
+
+リポジトリを取得したうえで、依存を全バージョン固定+SHA256検証付きで導入します
+(改ざんされた配布物はインストールに失敗します):
+
+```bash
+git clone https://github.com/cfn0eft/CSV-.git && cd CSV-
 pip install --require-hashes --only-binary :all: -r requirements.txt
 pip install --no-deps -e .
 
@@ -38,7 +55,7 @@ pip install --require-hashes --only-binary :all: -r requirements-dev.txt
 ## 使い方(Webアプリ)
 
 ```bash
-python -m csvtool
+python -m diffdesk
 ```
 
 ブラウザが自動で開きます(既定: http://127.0.0.1:8765、`--port` で変更可)。
@@ -55,16 +72,16 @@ python -m csvtool
 
 ```bash
 # 差分サマリー+色付きExcelレポート
-python -m csvtool diff master.xlsx sf_export.csv --profile 月次照合 --xlsx report.xlsx
+python -m diffdesk diff master.xlsx sf_export.csv --profile 月次照合 --xlsx report.xlsx
 
 # アップサートCSV+削除CSV+.sdl を一括生成
-python -m csvtool upsert master.xlsx sf_export.csv --profile 月次照合 \
+python -m diffdesk upsert master.xlsx sf_export.csv --profile 月次照合 \
     --out upsert.csv --delete-out delete.csv --sdl mapping.sdl
 
 # 文字コード変換 / 検証 / 結合
-python -m csvtool convert in.csv --out out.csv --out-encoding cp932
-python -m csvtool validate in.csv --keys 社員番号 --required 氏名 --format メール=email
-python -m csvtool concat 4月.csv 5月.csv 6月.csv --out 上期.csv
+python -m diffdesk convert in.csv --out out.csv --out-encoding cp932
+python -m diffdesk validate in.csv --keys 社員番号 --required 氏名 --format メール=email
+python -m diffdesk concat 4月.csv 5月.csv 6月.csv --out 上期.csv
 ```
 
 プロファイル(マッピング定義)はWeb画面で作って保存するのが簡単です。JSONを直接書くこともできます。
@@ -73,7 +90,7 @@ python -m csvtool concat 4月.csv 5月.csv 6月.csv --out 上期.csv
 
 ```python
 from pathlib import Path
-from csvtool.core import (
+from diffdesk.core import (
     ColumnPair, MappingConfig, load_table, diff_tables, build_upsert_table, write_csv,
 )
 
@@ -97,6 +114,6 @@ python scripts/make_fixtures.py     # テストフィクスチャ再生成
 python scripts/make_requirements.py # 依存ロックファイル再生成
 ```
 
-構成: `csvtool/core/`(純Pythonロジック)/ `csvtool/web/`(FastAPI)/
-`csvtool/static/`(フロントエンド)/ `csvtool/cli.py`(CLI)。
+構成: `diffdesk/core/`(純Pythonロジック)/ `diffdesk/web/`(FastAPI)/
+`diffdesk/static/`(フロントエンド)/ `diffdesk/cli.py`(CLI)。
 `core` はwebライブラリに依存しないことをテストで担保しています。

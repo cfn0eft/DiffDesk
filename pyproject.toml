@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "csvtool"
+name = "diffdesk"
 version = "0.1.0"
 description = "CSV/Excelの比較・編集・Salesforce Data Loader用CSV生成ツール(ローカルWebアプリ+CLI)"
 readme = "README.md"
@@ -21,13 +21,13 @@ dependencies = [
 dev = ["pytest>=8", "httpx>=0.27"]
 
 [project.scripts]
-csvtool = "csvtool.__main__:main"
+diffdesk = "diffdesk.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["csvtool*"]
+include = ["diffdesk*"]
 
 [tool.setuptools.package-data]
-csvtool = ["static/*"]
+diffdesk = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

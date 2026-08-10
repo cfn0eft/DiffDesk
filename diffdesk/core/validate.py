@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 
-from .model import CsvToolError, Table
+from .model import DiffDeskError, Table
 
 _EMAIL_RE = re.compile(r"^[\w.+-]+@[\w-]+(\.[\w-]+)+$")
 _PHONE_RE = re.compile(r"^[\d\-() +]{6,}$")
@@ -67,7 +67,7 @@ def validate_table(table: Table, rules: ValidationRules,
 
     for fmt_col, fmt_name in rules.formats.items():
         if fmt_name not in FORMAT_CHECKS:
-            raise CsvToolError(f"不明な形式チェックです: {fmt_name}", format=fmt_name)
+            raise DiffDeskError(f"不明な形式チェックです: {fmt_name}", format=fmt_name)
 
     if rules.key_columns:
         key_idx = [table.col_index(c) for c in rules.key_columns]
