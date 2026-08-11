@@ -425,6 +425,23 @@ function renderSplitTable(rows) {
     tr.onmouseenter = () => setSplitHover(+tr.dataset.ri, true);
     tr.onmouseleave = () => setSplitHover(+tr.dataset.ri, false);
   }));
+
+  // 紐づけ可能な行数を凡例に動的表示
+  const nDel = rows.filter(r => r.status === "only_a" && !r.known).length;
+  const nAdd = rows.filter(r => r.status === "only_b" && !r.known).length;
+  $("#link-count").innerHTML = (nDel + nAdd)
+    ? `<b>未対応 赤${nDel}件・緑${nAdd}件</b> — 中央の●をドラッグで紐づけできます。 `
+    : "";
+
+  // 紐づけ直後の行をフラッシュ表示
+  if (pendingFlashKey) {
+    const ri = rows.findIndex(r => JSON.stringify([...r.key]) === pendingFlashKey);
+    pendingFlashKey = null;
+    if (ri >= 0) SPLIT_TABLES.forEach(sel => {
+      const tr = document.querySelector(`${sel} tbody tr[data-ri="${ri}"]`);
+      if (tr) tr.classList.add("just-linked");
+    });
+  }
 }
 
 function setSplitHover(ri, on) {
@@ -454,6 +471,26 @@ function setSplitHover(ri, on) {
 // ---------------------------------------------------------------- 手動紐づけ(ドラッグ)
 // 中央ガターの ● を掴んで反対側の未対応行に落とすと、その2行をペアとして登録する。
 let linkDrag = null;  // {ri, status, x0, y0, moved, targetTr}
+let pendingFlashKey = null;  // 紐づけ直後にフラッシュ表示する行のキー
+
+function showDropHint(e, onTarget) {
+  const hint = $("#drop-hint");
+  hint.hidden = false;
+  hint.classList.toggle("on-target", onTarget);
+  hint.textContent = onTarget
+    ? "ここに落として紐づけ"
+    : "相手側の赤/緑の行まで紐を伸ばす";
+  hint.style.left = `${e.clientX + 14}px`;
+  hint.style.top = `${e.clientY + 18}px`;
+}
+
+function autoScrollPane(e) {
+  // ペインの上下端に近づいたら自動スクロール(縦は3ペイン同期済み)
+  const pane = $("#split-pane-a");
+  const rect = pane.getBoundingClientRect();
+  if (e.clientY < rect.top + 34) pane.scrollTop -= 14;
+  else if (e.clientY > rect.bottom - 34) pane.scrollTop += 14;
+}
 
 function overlayPos(e) {
   const rect = $("#split-view").getBoundingClientRect();
@@ -496,7 +533,9 @@ document.addEventListener("pointermove", e => {
   $("#link-overlay").removeAttribute("hidden");  // SVGはhiddenプロパティ非対応
   const line = $("#link-overlay").querySelector("line");
   line.setAttribute("x2", x); line.setAttribute("y2", y);
+  autoScrollPane(e);
   const target = dropTargetAt(e, linkDrag);
+  showDropHint(e, !!target);
   if (target !== linkDrag.targetTr) {
     clearLinkTargets();
     linkDrag.targetTr = target;
@@ -512,6 +551,7 @@ document.addEventListener("pointerup", e => {
   const drag = linkDrag;
   linkDrag = null;
   $("#link-overlay").setAttribute("hidden", "");
+  $("#drop-hint").hidden = true;
   clearLinkTargets();
   if (!drag.moved) return;  // ●はドラッグ専用(行の他の部分クリックで詳細表示)
   const target = dropTargetAt(e, drag);
@@ -531,6 +571,7 @@ async function registerManualPair(keyA, keyB) {
     await postJson(`/api/diff/${d.diff_id}/manual-pairs`,
       { key_a: [...keyA], key_b: [...keyB] });
     toast(`「${keyA.join("/")}」と「${keyB.join("/")}」を手動で紐づけました(⇔印)。詳細画面から解除できます。`);
+    pendingFlashKey = JSON.stringify([...keyA]);
     refreshAfterKnownChange();
   } catch (e) { toast(e.message, true); }
 }

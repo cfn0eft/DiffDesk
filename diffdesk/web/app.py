@@ -4,13 +4,27 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .. import __version__
 from ..core import DiffDeskError, EncodingWriteError
 from .routes import router
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+
+class NoCacheStaticFiles(StaticFiles):
+    """毎回サーバーに確認させる(ETag再検証)。
+
+    アップデート後にブラウザが古いJS/CSSを使い続けて「新機能が出ない」
+    事故を防ぐ。ローカルツールなので再検証コストは無視できる。
+    """
+
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
 
 
 def create_app() -> FastAPI:
@@ -30,10 +44,12 @@ def create_app() -> FastAPI:
             }
         return JSONResponse(status_code=400, content=payload)
 
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.mount("/static", NoCacheStaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/", include_in_schema=False)
     def index():
-        return FileResponse(STATIC_DIR / "index.html")
+        html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        html = html.replace("{{V}}", __version__)
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
     return app
