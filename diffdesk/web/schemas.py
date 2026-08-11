@@ -65,6 +65,30 @@ class ExportHtmlRequest(BaseModel):
     only_b_is_error: bool = True
 
 
+class CalcColumnRequest(BaseModel):
+    mode: str  # concat | substring | conditional
+    new_name: str
+    columns: list[str] = []          # concat用
+    separator: str = ""              # concat用
+    column: str = ""                 # substring/conditional用
+    start: int = 1                   # substring用(1始まり)
+    length: int | None = None        # substring用
+    op: str = "eq"                   # conditional用
+    value: str = ""                  # conditional用
+    then_value: str = ""             # conditional用
+    else_value: str = ""             # conditional用
+
+
+class RecipeSaveRequest(BaseModel):
+    name: str
+    file_id: str | None = None       # 指定時はそのファイルの操作履歴を保存
+    ops: list[dict] | None = None    # 直接opsを渡す場合
+
+
+class RecipeApplyRequest(BaseModel):
+    name: str
+
+
 class ClusterRequest(BaseModel):
     column: str
 

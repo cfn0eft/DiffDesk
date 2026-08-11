@@ -345,6 +345,40 @@ class TestV050Features:
         assert r["count"] == 1 and "範囲外" in r["issues"][0]["message"]
 
 
+class TestV060Features:
+    def test_calc_column_and_recipe_roundtrip(self, client, monkeypatch, tmp_path):
+        raw = "姓,名,部署\n山田, ＡＢ ,営業部\n鈴木,子,開発部\n".encode("utf-8")
+        fid = upload(client, "r.csv", raw)["file_id"]
+        # クレンジング → 計算列(結合) → 履歴確認 → レシピ保存 → 別ファイルに適用
+        client.post(f"/api/files/{fid}/clean",
+                    json={"columns": ["名"], "ops": ["trim", "zen2han"]})
+        r = client.post(f"/api/files/{fid}/calc-column", json={
+            "mode": "concat", "new_name": "氏名", "columns": ["姓", "名"],
+            "separator": " "})
+        assert "氏名" in r.json()["preview"]["columns"]
+        rec = client.get(f"/api/files/{fid}/recipe").json()
+        assert len(rec["ops"]) == 2
+        assert any("クレンジング" in l for l in rec["labels"])
+        client.post("/api/recipes", json={"name": "整形テスト", "file_id": fid})
+        assert "整形テスト" in client.get("/api/recipes").json()["recipes"]
+
+        fid2 = upload(client, "r2.csv", raw)["file_id"]
+        r = client.post(f"/api/files/{fid2}/apply-recipe", json={"name": "整形テスト"})
+        body = r.json()
+        assert len(body["logs"]) == 2
+        assert "氏名" in body["preview"]["columns"]
+        assert body["preview"]["rows"][0][3] == "山田 AB"
+
+    def test_conditional_calc(self, client):
+        raw = "点数\n80\n40\n".encode("utf-8")
+        fid = upload(client, "s.csv", raw)["file_id"]
+        r = client.post(f"/api/files/{fid}/calc-column", json={
+            "mode": "conditional", "new_name": "判定", "column": "点数",
+            "op": "gte", "value": "60", "then_value": "合格", "else_value": "不合格"})
+        rows = r.json()["preview"]["rows"]
+        assert rows[0][1] == "合格" and rows[1][1] == "不合格"
+
+
 class TestProfiles:
     def test_save_load_list_delete(self, client):
         profile = {

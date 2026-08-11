@@ -21,8 +21,16 @@ from ..core import (
     build_verification,
     cluster_column,
     compare_profiles,
+    concat_columns,
+    conditional_column,
     crosstab,
+    describe_op,
+    apply_recipe,
     fuzzy_match,
+    list_recipes,
+    load_recipe,
+    save_recipe,
+    substring_column,
     profile_table,
     split_address_column,
     split_column,
@@ -210,6 +218,7 @@ def clean_file(file_id: str, req: sc.CleanRequest):
     table = store.get_table(file_id).copy()
     table, changed = clean_columns(table, req.columns, req.ops)
     store.set_table(file_id, table)
+    store.log_op(file_id, "clean", {"columns": req.columns, "ops": req.ops})
     return {"changed_cells": changed, "preview": _preview(table)}
 
 
@@ -237,6 +246,7 @@ def apply_map(file_id: str, req: sc.ApplyMapRequest):
     table = store.get_table(file_id).copy()
     table, changed = apply_value_map(table, req.column, req.mapping)
     store.set_table(file_id, table)
+    store.log_op(file_id, "apply_map", {"column": req.column, "mapping": req.mapping})
     return {"changed": changed}
 
 
@@ -269,6 +279,8 @@ def split_column_file(file_id: str, req: sc.SplitColumnRequest):
     table = store.get_table(file_id).copy()
     table, n_parts = split_column(table, req.column, req.delimiter)
     store.set_table(file_id, table)
+    store.log_op(file_id, "split_column",
+                 {"column": req.column, "delimiter": req.delimiter})
     return {"parts": n_parts, "preview": _preview(table)}
 
 
@@ -309,6 +321,7 @@ def dedupe_file(file_id: str):
     table = store.get_table(file_id).copy()
     table, removed = dedupe_rows(table)
     store.set_table(file_id, table)
+    store.log_op(file_id, "dedupe", {})
     return {"removed": removed, "total_rows": len(table.rows)}
 
 
@@ -327,6 +340,10 @@ def replace_file(file_id: str, req: sc.ReplaceRequest):
                                columns=req.columns, regex=req.regex,
                                case_sensitive=req.case_sensitive)
     store.set_table(file_id, table)
+    store.log_op(file_id, "replace", {
+        "query": req.query, "replacement": req.replacement,
+        "columns": req.columns, "regex": req.regex,
+        "case_sensitive": req.case_sensitive})
     return {"replaced": count}
 
 
@@ -577,7 +594,70 @@ def split_address_file(file_id: str, req: sc.SplitAddressRequest):
     table = store.get_table(file_id).copy()
     table, parsed = split_address_column(table, req.column)
     store.set_table(file_id, table)
+    store.log_op(file_id, "split_address", {"column": req.column})
     return {"parsed": parsed, "preview": _preview(table)}
+
+
+# ---------------------------------------------------------------- 計算列
+@router.post("/files/{file_id}/calc-column")
+def calc_column(file_id: str, req: sc.CalcColumnRequest):
+    table = store.get_table(file_id).copy()
+    if req.mode == "concat":
+        table = concat_columns(table, req.columns, req.new_name, req.separator)
+        store.log_op(file_id, "concat_columns", {
+            "columns": req.columns, "new_name": req.new_name,
+            "separator": req.separator})
+    elif req.mode == "substring":
+        table = substring_column(table, req.column, req.new_name,
+                                 req.start, req.length)
+        store.log_op(file_id, "substring_column", {
+            "column": req.column, "new_name": req.new_name,
+            "start": req.start, "length": req.length})
+    elif req.mode == "conditional":
+        table = conditional_column(table, req.column, req.op, req.value,
+                                   req.new_name, req.then_value, req.else_value)
+        store.log_op(file_id, "conditional_column", {
+            "column": req.column, "op": req.op, "value": req.value,
+            "new_name": req.new_name, "then_value": req.then_value,
+            "else_value": req.else_value})
+    else:
+        from ..core import DiffDeskError
+        raise DiffDeskError(f"不明な計算列モードです: {req.mode}")
+    store.set_table(file_id, table)
+    return {"preview": _preview(table)}
+
+
+# ---------------------------------------------------------------- レシピ
+@router.get("/files/{file_id}/recipe")
+def get_file_recipe(file_id: str):
+    entry = store.get_file(file_id)
+    return {"ops": entry.ops,
+            "labels": [describe_op(o) for o in entry.ops]}
+
+
+@router.get("/recipes")
+def get_recipes():
+    return {"recipes": list_recipes()}
+
+
+@router.post("/recipes")
+def post_recipe(req: sc.RecipeSaveRequest):
+    ops = req.ops
+    if ops is None:
+        ops = store.get_file(req.file_id).ops if req.file_id else []
+    save_recipe(req.name, ops)
+    return {"ok": True, "name": req.name, "count": len(ops)}
+
+
+@router.post("/files/{file_id}/apply-recipe")
+def apply_file_recipe(file_id: str, req: sc.RecipeApplyRequest):
+    ops = load_recipe(req.name)
+    table = store.get_table(file_id).copy()
+    table, logs = apply_recipe(table, ops)
+    store.set_table(file_id, table)
+    entry = store.get_file(file_id)
+    entry.ops.extend(ops)
+    return {"logs": logs, "preview": _preview(table)}
 
 
 # ---------------------------------------------------------------- profiles

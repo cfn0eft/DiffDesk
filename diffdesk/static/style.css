@@ -204,6 +204,23 @@ details[open].card summary { border-bottom-color: var(--border); margin-bottom: 
 #verify-problems .issue { color: var(--danger); }
 #verify-problems .allowed { color: var(--hint); }
 
+/* ---------------- 照合進捗・レコード詳細 ---------------- */
+#verify-progress { margin: 6px 0; }
+.progress-label { font-size: 13px; margin-bottom: 4px; }
+.progress {
+  display: flex; height: 16px; border: 1px solid var(--border-strong);
+  background: #fff; overflow: hidden;
+}
+.progress .p-ok { background: #5a9a52; }
+.progress .p-ng { background: #e0b93d; }
+.progress .p-miss { background: #c05a4e; }
+#diff-table tbody tr { cursor: pointer; }
+#diff-table .matchcell { white-space: nowrap; }
+tr.detail-ok td:first-child { color: #2e6b28; font-weight: bold; }
+tr.detail-ng td { background: var(--yellow-cell); }
+tr.detail-ng td:first-child { color: var(--danger); font-weight: bold; }
+tr.detail-miss td { background: #f1eee7; color: var(--hint); }
+
 /* ---------------- トースト・ダイアログ ---------------- */
 #toast {
   position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);

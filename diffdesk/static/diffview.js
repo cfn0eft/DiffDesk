@@ -61,8 +61,18 @@ async function loadVerification() {
     const banner = $("#verify-banner");
     banner.className = v.passed ? "ok" : "ng";
     banner.textContent = v.passed
-      ? "✔ 投入OK — 件数・内容ともに一致しています"
+      ? "✔ 照合OK — 件数・内容ともに一致しています"
       : "✖ 要確認 — 差異があります";
+    // 進捗バー: 基準(A)のうち正しく登録されている割合
+    const okCount = v.same;
+    const pct = v.rows_a ? (okCount / v.rows_a) * 100 : 0;
+    $("#verify-progress").innerHTML =
+      `<div class="progress-label"><b>${v.rows_a}レコード中 ${okCount}件</b> が正しく登録済み` +
+      `(${pct.toFixed(1)}%)${v.only_a ? ` — 未登録 ${v.only_a}件` : ""}` +
+      `${v.changed ? ` — 値の相違 ${v.changed}件` : ""}</div>` +
+      `<div class="progress"><div class="p-ok" style="width:${pct}%"></div>` +
+      `<div class="p-ng" style="width:${v.rows_a ? (v.changed / v.rows_a) * 100 : 0}%"></div>` +
+      `<div class="p-miss" style="width:${v.rows_a ? (v.only_a / v.rows_a) * 100 : 0}%"></div></div>`;
     $("#verify-counts").innerHTML =
       `<span>投入元(A): <b>${v.rows_a}</b>件</span>` +
       `<span>Salesforce(B): <b>${v.rows_b}</b>件</span>` +
@@ -123,15 +133,26 @@ async function loadRows() {
 
 function choiceKey(row, colA) { return JSON.stringify([row.key, colA]); }
 
+let currentRows = [];  // 表示中ページの行(詳細パネル用)
+
 function renderRowsTable(rows) {
+  currentRows = rows;
   const d = state.diff;
   const nCols = d.columns_a.length;
-  const head = `<tr><th>状態</th>` + d.columns_a.map((c, i) => {
+  const nValues = d.key_flags.filter(f => !f).length;
+  const head = `<tr><th>状態</th><th>照合</th>` + d.columns_a.map((c, i) => {
     const label = c === d.columns_b[i] ? c : `${c} / ${d.columns_b[i]}`;
     return `<th>${d.key_flags[i] ? "🔑 " : ""}${escapeHtml(label)}</th>`;
   }).join("") + `</tr>`;
 
-  const body = rows.map(r => {
+  const matchLabel = r => {
+    if (r.status === "same") return `<b>${nValues}/${nValues}</b> 一致`;
+    if (r.status === "changed") return `<b>${nValues - r.cell_diffs.length}/${nValues}</b> 一致`;
+    if (r.status === "only_a") return "未登録";
+    return "基準に無し";
+  };
+
+  const body = rows.map((r, ri) => {
     const cells = [];
     const changedCols = new Map(r.cell_diffs.map(cd => [cd.col_a, cd]));
     for (let i = 0; i < nCols; i++) {
@@ -149,12 +170,14 @@ function renderRowsTable(rows) {
         cells.push(`<td>${escapeHtml(v)}</td>`);
       }
     }
-    return `<tr class="row-${r.status}"><td>${STATUS_JA[r.status]}</td>${cells.join("")}</tr>`;
+    return `<tr class="row-${r.status}" data-ri="${ri}"><td>${STATUS_JA[r.status]}</td>` +
+      `<td class="matchcell">${matchLabel(r)}</td>${cells.join("")}</tr>`;
   }).join("");
 
   $("#diff-table").innerHTML = `<thead>${head}</thead><tbody>${body}</tbody>`;
   $$("#diff-table .diffval .side").forEach(el => {
-    el.onclick = () => {
+    el.onclick = e => {
+      e.stopPropagation();  // 行クリック(詳細表示)と区別
       const wrap = el.closest(".diffval");
       const key = choiceKey({ key: JSON.parse(wrap.dataset.key) }, wrap.dataset.col);
       state.mergeChoices[key] = el.classList.contains("b") ? "b" : "a";
@@ -162,6 +185,44 @@ function renderRowsTable(rows) {
       el.classList.add("chosen");
     };
   });
+  $$("#diff-table tbody tr").forEach(tr => {
+    tr.onclick = () => showRecordDetail(currentRows[+tr.dataset.ri]);
+  });
+}
+
+// レコード詳細: 1件の全項目を基準↔比較で縦に並べて照合表示
+function showRecordDetail(r) {
+  if (!r) return;
+  const d = state.diff;
+  const changed = new Map(r.cell_diffs.map(cd => [cd.col_a, cd]));
+  const rowsHtml = d.columns_a.map((colA, i) => {
+    const colB = d.columns_b[i];
+    const va = r.row_a ? r.row_a[i] : "";
+    const vb = r.row_b ? r.row_b[i] : "";
+    let mark, cls;
+    if (d.key_flags[i]) { mark = "🔑"; cls = ""; }
+    else if (r.status === "only_a") { mark = "－"; cls = "detail-miss"; }
+    else if (r.status === "only_b") { mark = "－"; cls = "detail-miss"; }
+    else if (changed.has(colA)) { mark = "✖"; cls = "detail-ng"; }
+    else { mark = "✔"; cls = "detail-ok"; }
+    const label = colA === colB ? colA : `${colA} / ${colB}`;
+    return `<tr class="${cls}"><td>${mark}</td><td>${escapeHtml(label)}</td>` +
+      `<td>${escapeHtml(va)}</td><td>${escapeHtml(vb)}</td></tr>`;
+  }).join("");
+  const nValues = d.key_flags.filter(f => !f).length;
+  const summary = r.status === "same" ? `全${nValues}項目一致`
+    : r.status === "changed" ? `${nValues - r.cell_diffs.length}/${nValues}項目一致(✖が相違)`
+    : r.status === "only_a" ? "比較ファイル(B)に存在しません(未登録)"
+    : "基準ファイル(A)に存在しません";
+  const dlg = $("#dialog");
+  dlg.innerHTML = `<h2>レコード照合詳細 — キー: ${escapeHtml(r.key.join(" / "))}</h2>
+    <p style="margin:8px 12px"><b>${STATUS_JA[r.status]}</b>: ${summary}</p>
+    <div style="margin:0 12px; max-height:60vh; overflow:auto">
+    <table><thead><tr><th></th><th>項目</th><th>基準 (A)</th><th>比較 (B)</th></tr></thead>
+    <tbody>${rowsHtml}</tbody></table></div>
+    <div class="toolbar"><button data-cancel class="primary">閉じる</button></div>`;
+  dlg.querySelector("[data-cancel]").onclick = () => dlg.close();
+  dlg.showModal();
 }
 
 $$(".statusfilter").forEach(b => b.onclick = () => {
