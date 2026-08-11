@@ -96,6 +96,17 @@ class KnownDiffRequest(BaseModel):
 class ManualPairRequest(BaseModel):
     key_a: list[str]  # 基準(A)側 only_a 行のキー
     key_b: list[str]  # 比較(B)側 only_b 行のキー
+    note: str = ""  # 紐づけ理由のメモ(監査用・任意)
+    score: float | None = None  # 登録時の一致率(監査用・任意)
+
+
+class LinkSuggestRequest(BaseModel):
+    threshold: float = 0.5
+    limit: int = 50
+
+
+class LinkImportRequest(BaseModel):
+    text: str  # Web版AIの回答をそのまま貼り付けたテキスト
 
 
 class UserDictRequest(BaseModel):

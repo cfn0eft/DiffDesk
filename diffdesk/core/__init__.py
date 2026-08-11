@@ -5,17 +5,29 @@ fastapi等のwebライブラリをimportしてはならない。
 """
 from .address import split_address, split_address_column
 from .known import apply_known_diffs, column_diff_summary
-from .manual import apply_manual_pairs, list_unmatched, validate_manual_pair
+from .manual import (
+    apply_manual_pairs,
+    build_link_prompt,
+    list_unmatched,
+    pair_similarity,
+    parse_link_answer,
+    suggest_links,
+    validate_manual_pair,
+)
 from .workspace import (
     add_known_diff,
+    add_manual_link,
     add_user_pairs,
     append_history,
     clear_history,
     clear_known_diffs,
+    clear_manual_links,
     load_history,
     load_known_diffs,
+    load_manual_links,
     load_user_dict,
     remove_known_diff,
+    remove_manual_link,
     remove_user_pair,
 )
 from .anonymize import ANONYMIZE_MODES, anonymize_columns

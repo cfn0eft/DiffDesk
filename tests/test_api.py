@@ -494,3 +494,76 @@ class TestV081Serving:
         r = client.get("/static/app.js")
         assert r.status_code == 200
         assert r.headers["cache-control"] == "no-cache"
+
+
+class TestV090Features:
+    def test_pair_preview(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        r = client.post(f"/api/diff/{diff_id}/pair-preview",
+                        json={"key_a": ["0004"], "key_b": ["0006"]})
+        assert r.status_code == 200
+        body = r.json()
+        assert 0 <= body["score"] <= 1
+        assert len(body["columns"]) == 4
+        assert {"col_a", "value_a", "value_b", "sim"} <= set(body["columns"][0])
+
+    def test_link_suggest_endpoint(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        r = client.post(f"/api/diff/{diff_id}/link-suggest",
+                        json={"threshold": 0.1, "limit": 10})
+        assert r.status_code == 200
+        cands = r.json()["candidates"]
+        assert all(c["score"] >= 0.1 for c in cands)
+
+    def test_link_prompt_and_import(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        r = client.get(f"/api/diff/{diff_id}/link-prompt")
+        assert r.status_code == 200
+        assert r.json()["rows_a"] == 2 and r.json()["rows_b"] == 1
+        assert "JSON" in r.json()["prompt"]
+        # 回答取り込み(有効1件+無効1件)
+        text = '回答: ```json\n[{"key_a": ["0004"], "key_b": ["0006"], "confidence": 0.9, "reason": "類似"}, {"key_a": ["xxxx"], "key_b": ["0006"]}]\n```'
+        r = client.post(f"/api/diff/{diff_id}/link-import", json={"text": text})
+        assert r.status_code == 200
+        body = r.json()
+        assert len(body["pairs"]) == 1 and len(body["rejected"]) == 1
+        assert body["pairs"][0]["score"] == 0.9
+
+    def test_manual_link_persists_across_rerun(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        r = client.post(f"/api/diff/{diff_id}/manual-pairs",
+                        json={"key_a": ["0004"], "key_b": ["0006"],
+                              "note": "監査メモ", "score": 0.8})
+        assert r.status_code == 200
+        # 同じファイルで差分を再実行 → 新しいdiff_idでも自動で再適用される
+        diff_id2, _ = TestDiffFlow().run_diff(client)
+        assert diff_id2 != diff_id
+        rows = client.get(f"/api/diff/{diff_id2}/rows").json()["rows"]
+        m = next(x for x in rows if x["key"] == ["0004"])
+        assert m["manual"] and m["key_b"] == ["0006"]
+        pairs = client.get(f"/api/diff/{diff_id2}/manual-pairs").json()["pairs"]
+        assert pairs[0]["note"] == "監査メモ" and pairs[0]["score"] == 0.8
+
+    def test_ranked_unmatched(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        import json as _json
+        r = client.get(f"/api/diff/{diff_id}/unmatched",
+                       params={"side": "b", "rank_for": _json.dumps(["0004"])})
+        rows = r.json()["rows"]
+        assert rows and "score" in rows[0]
+
+    def test_verify_xlsx_has_audit_sheets(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        client.post(f"/api/diff/{diff_id}/manual-pairs",
+                    json={"key_a": ["0004"], "key_b": ["0006"], "note": "test"})
+        r = client.post(f"/api/export/verify/{diff_id}", json={"format": "xlsx"})
+        assert r.status_code == 200
+        import io as _io
+
+        from openpyxl import load_workbook
+        wb = load_workbook(_io.BytesIO(r.content))
+        assert "手動紐づけ" in wb.sheetnames and "既知差分" in wb.sheetnames
+        ws = wb["手動紐づけ"]
+        rows = list(ws.values)
+        assert rows[0][0] == "基準(A)キー"
+        assert rows[1][0] == "0004" and rows[1][3] == "test"

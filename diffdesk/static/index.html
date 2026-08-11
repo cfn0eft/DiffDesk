@@ -50,6 +50,7 @@
       <span class="spacer"></span>
       <button id="btn-swap">A ⇔ B を入れ替え</button>
       <button id="btn-goto-map">列マッピングを自分で設定 →</button>
+      <button id="btn-compare-1" title="照合せず、2つのデータを別ウィンドウで並べて目視確認します">👀 別ウィンドウで見比べ</button>
     </div>
   </div>
 
@@ -206,6 +207,7 @@
         <button id="diff-prev">前へ</button>
         <button id="diff-next">次へ</button>
         <button id="btn-fullscreen" title="照合結果を全画面で表示(Escで解除)">⛶ 全画面</button>
+        <button id="btn-compare-2" title="照合せず、2つのデータを別ウィンドウで並べて目視確認します">👀 見比べ</button>
       </div>
       <div class="scroll-x" id="merged-wrap"><table id="diff-table"></table></div>
       <div id="split-view" hidden>
@@ -232,6 +234,44 @@
         中央の <b>●</b> をドラッグして相手側の行に落とすと、キーが違うレコード同士を<b>手動で紐づけ</b>できます(⇔印)。</p>
     </div>
     <div id="diff-statusbar" class="statusbar"></div>
+    <details class="card sub">
+      <summary>紐づけ候補の提案(未対応行のおすすめペア)</summary>
+      <p class="hint">値の内容の類似度から「同じレコードらしい組」を提案します。承認する前に必ず内容を確認してください(承認時に確認画面が出ます)。</p>
+      <div class="toolbar">
+        <button id="suggest-run" class="primary">候補を自動提案</button>
+        <label>しきい値
+          <select id="suggest-th">
+            <option value="0.8">80%以上</option>
+            <option value="0.6" selected>60%以上</option>
+            <option value="0.4">40%以上</option>
+          </select></label>
+        <button id="suggest-accept-high" title="一致率90%以上の候補をまとめて登録します(確認画面なし)">90%以上を一括承認</button>
+        <span id="suggest-info" class="hint"></span>
+      </div>
+      <div id="suggest-list"></div>
+      <details class="sub">
+        <summary>Web版AI(Gemini等)に判断させる — コピペ連携</summary>
+        <p class="hint">⚠ プロンプトには未対応行のデータの値がそのまま含まれます。個人情報・機密情報の取り扱いルールに従って使用してください。DiffDesk自体はAIに接続しません(コピーと取り込みだけを行います)。</p>
+        <div class="toolbar">
+          <button id="ai-prompt-copy">AI用プロンプトをコピー</button>
+          <span id="ai-prompt-info" class="hint"></span>
+        </div>
+        <textarea id="ai-answer" rows="4" style="width:100%" placeholder="AIの回答(JSONを含むテキスト)をそのまま貼り付け"></textarea>
+        <div class="toolbar">
+          <button id="ai-import">回答を取り込み(候補として表示)</button>
+        </div>
+        <div id="ai-rejected" class="hint"></div>
+      </details>
+    </details>
+    <details class="card sub">
+      <summary>手動紐づけの管理(登録済みペアの監査記録)</summary>
+      <p class="hint">キーの組で保存され、同じファイルで差分を再実行しても自動で再適用されます。検証レポートExcelにも「手動紐づけ」シートとして出力されます。</p>
+      <div class="toolbar">
+        <button id="links-refresh" class="mini">一覧を更新</button>
+        <button id="links-clear" class="danger mini">全て削除</button>
+      </div>
+      <div id="links-list"></div>
+    </details>
     <details class="card sub">
       <summary>既知差分の管理(「確認済み・問題なし」として登録した差異)</summary>
       <p class="hint">照合結果の行をクリック → 詳細画面の「既知にする」で登録できます。登録した差異は以後の照合で問題に数えません。</p>

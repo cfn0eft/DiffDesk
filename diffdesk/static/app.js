@@ -749,3 +749,13 @@ restorePrefs();
 refreshProfiles();
 refreshBaselines();
 refreshFileList();
+
+// ---------------------------------------------------------------- 見比べウィンドウ
+{
+  const openCompare = () =>
+    window.open("/compare", "diffdesk-compare", "width=1500,height=900");
+  const b1 = $("#btn-compare-1");
+  const b2 = $("#btn-compare-2");
+  if (b1) b1.onclick = openCompare;
+  if (b2) b2.onclick = openCompare;
+}

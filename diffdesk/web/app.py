@@ -52,4 +52,11 @@ def create_app() -> FastAPI:
         html = html.replace("{{V}}", __version__)
         return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
+    @app.get("/compare", include_in_schema=False)
+    def compare():
+        """見比べビューア(照合なし・確認専用の別ウィンドウ)。"""
+        html = (STATIC_DIR / "compare.html").read_text(encoding="utf-8")
+        html = html.replace("{{V}}", __version__)
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
     return app

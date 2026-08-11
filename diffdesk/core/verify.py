@@ -192,6 +192,40 @@ def build_verification_xlsx(diff: DiffResult, *, only_b_is_error: bool = True) -
             cells[0].fill = fill
         ws2.append(cells)
 
+    # 監査証跡: 手動紐づけ・既知差分の登録内容(誰が見ても判断の記録を追えるように)
+    from .workspace import load_known_diffs, load_manual_links
+
+    def _audit_sheet(title, columns, rows):
+        ws_a = wb.create_sheet(title)
+        head_a = []
+        for col in columns:
+            c = WriteOnlyCell(ws_a, col)
+            c.font = bold
+            c.fill = fill_header
+            head_a.append(c)
+        ws_a.append(head_a)
+        for r in rows:
+            ws_a.append(list(r))
+
+    links = load_manual_links()
+    _audit_sheet(
+        "手動紐づけ",
+        ["基準(A)キー", "比較(B)キー", "一致率", "メモ", "登録日時"],
+        [["/".join(e["key_a"]), "/".join(e["key_b"]),
+          "" if e.get("score") is None else e["score"],
+          e.get("note", ""), e.get("added_at", "")] for e in links])
+    knowns = load_known_diffs()
+    _audit_sheet(
+        "既知差分",
+        ["種類", "キー", "内容", "メモ", "登録日時"],
+        [["セル差分" if e.get("type") == "cell" else "欠落",
+          "/".join(e.get("key", [])),
+          (f"{e.get('col_a', '')}: {e.get('value_a', '')} → {e.get('value_b', '')}"
+           if e.get("type") == "cell"
+           else ("比較先に無い(未登録を容認)" if e.get("status") == "only_a"
+                 else "基準に無い(存在を容認)")),
+          e.get("note", ""), e.get("added_at", "")] for e in knowns])
+
     out = _io.BytesIO()
     wb.save(out)
     return out.getvalue()
