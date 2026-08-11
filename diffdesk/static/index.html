@@ -192,7 +192,7 @@
       <div class="toolbar">
         <span>形式:</span>
         <button id="view-merged" class="viewmode active" title="AとBを1行にまとめ、変更セルは 旧→新 で表示">統合</button>
-        <button id="view-split" class="viewmode" title="左=基準(A)、右=比較(B)をレコード対で並べて表示">左右分割</button>
+        <button id="view-split" class="viewmode" title="コードエディタの差分表示のように、左=基準(A)、右=比較(B)をレコード対で色付きで並べる">左右分割</button>
         <span>表示:</span>
         <button class="statusfilter active" data-status="">全て</button>
         <button class="statusfilter" data-status="only_a">Aのみ</button>
@@ -206,8 +206,27 @@
         <button id="diff-prev">前へ</button>
         <button id="diff-next">次へ</button>
       </div>
-      <div class="scroll-x"><table id="diff-table"></table></div>
-      <p class="hint">変更セルは「A側の値 → B側の値」(マージで採用する側をクリックで選択、既定はA)。<b>行をクリックすると全項目の照合詳細</b>を表示します。</p>
+      <div class="scroll-x" id="merged-wrap"><table id="diff-table"></table></div>
+      <div id="split-view" hidden>
+        <div class="split-col">
+          <div class="pane-label lab-a" id="split-label-a">基準ファイル (A)</div>
+          <div class="split-pane" id="split-pane-a"><table id="split-a"></table></div>
+        </div>
+        <div class="split-col gutter-col">
+          <div class="pane-label">&nbsp;</div>
+          <div class="split-gutter" id="split-pane-g"><table id="split-g"></table></div>
+        </div>
+        <div class="split-col">
+          <div class="pane-label lab-b" id="split-label-b">比較ファイル (B)</div>
+          <div class="split-pane" id="split-pane-b"><table id="split-b"></table></div>
+        </div>
+      </div>
+      <p class="hint" id="merged-hint">変更セルは「A側の値 → B側の値」(マージで採用する側をクリックで選択、既定はA)。<b>行をクリックすると全項目の照合詳細</b>を表示します。</p>
+      <p class="hint" id="split-legend" hidden>同じ高さの行が対応するレコードです(左右スクロールも連動)。
+        <span class="lg lg-del">赤 = 比較先に未登録(Aのみ)</span>
+        <span class="lg lg-mod">黄 = 値の相違(濃い箇所が相違セル)</span>
+        <span class="lg lg-add">緑 = 基準に無し(Bのみ)</span>
+        斜線 = 相手側に行なし。<b>行をクリックすると照合詳細</b>を表示します。</p>
     </div>
     <div id="diff-statusbar" class="statusbar"></div>
     <details class="card sub">

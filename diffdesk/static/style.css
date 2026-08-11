@@ -216,12 +216,62 @@ details[open].card summary { border-bottom-color: var(--border); margin-bottom: 
 .progress .p-miss { background: #c05a4e; }
 #diff-table tbody tr { cursor: pointer; }
 #diff-table .matchcell { white-space: nowrap; }
-/* 左右分割表示 */
-#diff-table .grouphead th { text-align: center; font-size: 12px; }
-#diff-table .side-a-h { background: #cfd8cd; }
-#diff-table .side-b-h { background: #d6d2c4; }
-#diff-table .b-sep { border-left: 3px double var(--border-strong); }
-#diff-table td.absent { background: #eceae3; color: #9a958a; text-align: center; }
+/* 左右分割表示(コードエディタ差分風) */
+#split-view {
+  display: flex; align-items: stretch;
+  border: 1px solid var(--border-strong); background: var(--panel);
+}
+#split-view[hidden] { display: none; }
+.split-col { flex: 1 1 50%; min-width: 0; display: flex; flex-direction: column; }
+.gutter-col { flex: 0 0 30px; }
+.pane-label {
+  padding: 4px 8px; font-size: 12px; font-weight: 600;
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pane-label.lab-a { background: #cfd8cd; }
+.pane-label.lab-b { background: #d6d2c4; }
+.gutter-col .pane-label { background: var(--toolbar); }
+.split-pane { overflow: auto; max-height: 62vh; }
+.split-gutter { overflow: hidden; max-height: 62vh; }
+#split-a, #split-b { table-layout: fixed; min-width: 100%; border-collapse: collapse; }
+#split-g { width: 100%; border-collapse: collapse; }
+#split-a th, #split-a td, #split-b th, #split-b td, #split-g th, #split-g td {
+  height: 26px; box-sizing: border-box; padding: 3px 8px; font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-bottom: 1px solid var(--border); max-width: none;
+}
+#split-a thead th, #split-b thead th, #split-g thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: #e3e0d6; border-bottom: 1px solid var(--border-strong);
+}
+#split-view .rownum {
+  color: #8a857a; text-align: right; background: #efede6;
+  border-right: 1px solid var(--border); font-variant-numeric: tabular-nums;
+}
+#split-view tbody tr { cursor: pointer; }
+/* 行の色: 赤=Aのみ(比較先に未登録) 緑=Bのみ(基準に無し) 黄=値の相違 */
+#split-a tr.sp-del td { background: #f2dcdc; }
+#split-b tr.sp-add td { background: #dceadc; }
+#split-a tr.sp-mod td, #split-b tr.sp-mod td { background: #f7f2df; }
+#split-a td.sp-cell-del { background: #eac4c4; }
+#split-b td.sp-cell-add { background: #c4dcc4; }
+#split-view td.sp-cell-known { background: #e6e4dc; color: #8a857a; }
+#split-view tr.sp-known td { background: #e9e8e3; color: #8a857a; }
+#split-view td.sp-absent {
+  background: repeating-linear-gradient(45deg, #f1efe9 0 6px, #e3e0d6 6px 12px);
+  color: #9a958a; text-align: center; font-size: 11px;
+}
+#split-view tr.hoverrow td { outline: 1px solid var(--accent); outline-offset: -1px; }
+#split-g td { text-align: center; padding: 3px 2px; font-weight: 700; }
+#split-g .g-changed { color: #a5732c; }
+#split-g .g-only_a { color: #a33c34; }
+#split-g .g-only_b { color: #2c6e2c; }
+#split-g .g-known, #split-g .g-same { color: #b5b0a4; }
+#split-legend .lg { padding: 1px 6px; border: 1px solid var(--border); margin: 0 2px; }
+#split-legend .lg-del { background: #f2dcdc; }
+#split-legend .lg-add { background: #dceadc; }
+#split-legend .lg-mod { background: #f7f2df; }
 .viewmode { padding: 2px 12px; }
 .viewmode.active { background: var(--accent); color: #fff; border-color: #2c362f; font-weight: bold; }
 /* 既知差分・ジャンプ・履歴 */
