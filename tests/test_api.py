@@ -442,3 +442,41 @@ def test_index_served(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "html" in r.text
+
+
+class TestV080Features:
+    def test_manual_pair_flow(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        # 紐づけ相手の候補一覧
+        ua = client.get(f"/api/diff/{diff_id}/unmatched", params={"side": "a"}).json()["rows"]
+        ub = client.get(f"/api/diff/{diff_id}/unmatched", params={"side": "b"}).json()["rows"]
+        assert [x["key"] for x in ua] == [["0004"], ["0005"]]
+        assert [x["key"] for x in ub] == [["0006"]]
+        # 手動で紐づけ
+        r = client.post(f"/api/diff/{diff_id}/manual-pairs",
+                        json={"key_a": ["0004"], "key_b": ["0006"]})
+        assert r.status_code == 200 and r.json()["count"] == 1
+        rows = client.get(f"/api/diff/{diff_id}/rows").json()["rows"]
+        m = next(x for x in rows if x["key"] == ["0004"])
+        assert m["manual"] and m["key_b"] == ["0006"] and m["status"] == "changed"
+        assert not any(x["status"] == "only_b" for x in rows)
+        v = client.get(f"/api/diff/{diff_id}/verify").json()
+        assert v["only_a"] == 1 and v["only_b"] == 0
+        # 候補一覧からも消える
+        ua = client.get(f"/api/diff/{diff_id}/unmatched", params={"side": "a"}).json()["rows"]
+        assert [x["key"] for x in ua] == [["0005"]]
+        # 解除で元に戻る
+        client.delete(f"/api/diff/{diff_id}/manual-pairs/0")
+        v = client.get(f"/api/diff/{diff_id}/verify").json()
+        assert v["only_a"] == 2 and v["only_b"] == 1
+
+    def test_manual_pair_validation(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        # キー一致済みの行は紐づけ不可
+        r = client.post(f"/api/diff/{diff_id}/manual-pairs",
+                        json={"key_a": ["0001"], "key_b": ["0006"]})
+        assert r.status_code == 400
+        # 存在しないキー
+        r = client.post(f"/api/diff/{diff_id}/manual-pairs",
+                        json={"key_a": ["0004"], "key_b": ["9999"]})
+        assert r.status_code == 400

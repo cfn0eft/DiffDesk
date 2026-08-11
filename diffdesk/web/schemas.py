@@ -93,6 +93,11 @@ class KnownDiffRequest(BaseModel):
     entry: dict  # {type: "cell"|"row", key: [...], ...}
 
 
+class ManualPairRequest(BaseModel):
+    key_a: list[str]  # 基準(A)側 only_a 行のキー
+    key_b: list[str]  # 比較(B)側 only_b 行のキー
+
+
 class UserDictRequest(BaseModel):
     pairs: list[dict]  # [{col_a, col_b}, ...]
 

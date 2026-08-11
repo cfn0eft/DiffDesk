@@ -36,7 +36,8 @@ def apply_known_diffs(diff: DiffResult, entries: list[dict]) -> DiffResult:
                 status = "changed" if remaining else "same"
                 rows.append(RowDiff(key=rd.key, status=status, row_a=rd.row_a,
                                     row_b=rd.row_b, cell_diffs=remaining,
-                                    known=not remaining, known_diffs=known))
+                                    known=not remaining, known_diffs=known,
+                                    manual=rd.manual, key_b=rd.key_b))
                 continue
         rows.append(rd)
 

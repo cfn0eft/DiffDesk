@@ -188,7 +188,7 @@
     <div id="summary-cards" class="cards"></div>
     <div id="columns-summary"></div>
     <div id="diff-warnings"></div>
-    <div class="card">
+    <div class="card" id="diff-table-card">
       <div class="toolbar">
         <span>形式:</span>
         <button id="view-merged" class="viewmode active" title="AとBを1行にまとめ、変更セルは 旧→新 で表示">統合</button>
@@ -205,9 +205,11 @@
         <span id="diff-page-info"></span>
         <button id="diff-prev">前へ</button>
         <button id="diff-next">次へ</button>
+        <button id="btn-fullscreen" title="照合結果を全画面で表示(Escで解除)">⛶ 全画面</button>
       </div>
       <div class="scroll-x" id="merged-wrap"><table id="diff-table"></table></div>
       <div id="split-view" hidden>
+        <svg id="link-overlay" hidden><line x1="0" y1="0" x2="0" y2="0" /></svg>
         <div class="split-col">
           <div class="pane-label lab-a" id="split-label-a">基準ファイル (A)</div>
           <div class="split-pane" id="split-pane-a"><table id="split-a"></table></div>
@@ -226,7 +228,8 @@
         <span class="lg lg-del">赤 = 比較先に未登録(Aのみ)</span>
         <span class="lg lg-mod">黄 = 値の相違(濃い箇所が相違セル)</span>
         <span class="lg lg-add">緑 = 基準に無し(Bのみ)</span>
-        斜線 = 相手側に行なし。<b>行をクリックすると照合詳細</b>を表示します。</p>
+        斜線 = 相手側に行なし。<b>行をクリックすると照合詳細</b>を表示します。
+        中央の <b>●</b> をドラッグして相手側の行に落とすと、キーが違うレコード同士を<b>手動で紐づけ</b>できます(⇔印)。</p>
     </div>
     <div id="diff-statusbar" class="statusbar"></div>
     <details class="card sub">

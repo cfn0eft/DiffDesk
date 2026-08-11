@@ -5,6 +5,7 @@ fastapi等のwebライブラリをimportしてはならない。
 """
 from .address import split_address, split_address_column
 from .known import apply_known_diffs, column_diff_summary
+from .manual import apply_manual_pairs, list_unmatched, validate_manual_pair
 from .workspace import (
     add_known_diff,
     add_user_pairs,
