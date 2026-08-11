@@ -134,9 +134,21 @@ async function loadRows() {
 function choiceKey(row, colA) { return JSON.stringify([row.key, colA]); }
 
 let currentRows = [];  // 表示中ページの行(詳細パネル用)
+let viewMode = localStorage.getItem("diffdesk-viewmode") || "merged";
+
+function matchLabelFor(r, nValues) {
+  if (r.status === "same") return `<b>${nValues}/${nValues}</b> 一致`;
+  if (r.status === "changed") return `<b>${nValues - r.cell_diffs.length}/${nValues}</b> 一致`;
+  if (r.status === "only_a") return "未登録";
+  return "基準に無し";
+}
 
 function renderRowsTable(rows) {
   currentRows = rows;
+  if (viewMode === "split") {
+    renderSplitTable(rows);
+    return;
+  }
   const d = state.diff;
   const nCols = d.columns_a.length;
   const nValues = d.key_flags.filter(f => !f).length;
@@ -145,12 +157,7 @@ function renderRowsTable(rows) {
     return `<th>${d.key_flags[i] ? "🔑 " : ""}${escapeHtml(label)}</th>`;
   }).join("") + `</tr>`;
 
-  const matchLabel = r => {
-    if (r.status === "same") return `<b>${nValues}/${nValues}</b> 一致`;
-    if (r.status === "changed") return `<b>${nValues - r.cell_diffs.length}/${nValues}</b> 一致`;
-    if (r.status === "only_a") return "未登録";
-    return "基準に無し";
-  };
+  const matchLabel = r => matchLabelFor(r, nValues);
 
   const body = rows.map((r, ri) => {
     const cells = [];
@@ -189,6 +196,63 @@ function renderRowsTable(rows) {
     tr.onclick = () => showRecordDetail(currentRows[+tr.dataset.ri]);
   });
 }
+
+// 左右分割表示: 左=基準(A)、右=比較(B)をレコード対で並べる
+function renderSplitTable(rows) {
+  const d = state.diff;
+  const nCols = d.columns_a.length;
+  const nValues = d.key_flags.filter(f => !f).length;
+
+  const groupHead = `<tr class="grouphead"><th colspan="2"></th>` +
+    `<th colspan="${nCols}" class="side-a-h">基準ファイル (A)</th>` +
+    `<th colspan="${nCols}" class="side-b-h b-sep">比較ファイル (B)</th></tr>`;
+  const colHead = `<tr><th>状態</th><th>照合</th>` +
+    d.columns_a.map((c, i) =>
+      `<th>${d.key_flags[i] ? "🔑 " : ""}${escapeHtml(c)}</th>`).join("") +
+    d.columns_b.map((c, i) =>
+      `<th${i === 0 ? ' class="b-sep"' : ""}>${d.key_flags[i] ? "🔑 " : ""}${escapeHtml(c)}</th>`).join("") +
+    `</tr>`;
+
+  const body = rows.map((r, ri) => {
+    const changed = new Set(r.cell_diffs.map(cd => cd.col_a));
+    const sideCells = (rowVals, absentLabel) => d.columns_a.map((colA, i) => {
+      const sep = "";
+      if (!rowVals) {
+        return `<td class="absent">${i === Math.floor(nCols / 2) ? absentLabel : ""}</td>`;
+      }
+      const cls = changed.has(colA) ? "cell-changed" : "";
+      return `<td class="${cls}">${escapeHtml(rowVals[i])}</td>`;
+    });
+    const cellsA = sideCells(r.row_a, "(基準に無し)");   // A側が空 = 基準に存在しない
+    const cellsB = sideCells(r.row_b, "(未登録)");       // B側が空 = 比較先に未登録
+    // B側の先頭セルに区切り線クラスを付与
+    cellsB[0] = cellsB[0].replace("<td class=\"", "<td class=\"b-sep ")
+                         .replace("<td class=\"b-sep absent", "<td class=\"b-sep absent");
+    return `<tr class="row-${r.status}" data-ri="${ri}">` +
+      `<td>${STATUS_JA[r.status]}</td><td class="matchcell">${matchLabelFor(r, nValues)}</td>` +
+      cellsA.join("") + cellsB.join("") + `</tr>`;
+  }).join("");
+
+  $("#diff-table").innerHTML = `<thead>${groupHead}${colHead}</thead><tbody>${body}</tbody>`;
+  $$("#diff-table tbody tr").forEach(tr => {
+    tr.onclick = () => showRecordDetail(currentRows[+tr.dataset.ri]);
+  });
+}
+
+$("#view-merged").onclick = () => setViewMode("merged");
+$("#view-split").onclick = () => setViewMode("split");
+
+function setViewMode(mode) {
+  viewMode = mode;
+  try { localStorage.setItem("diffdesk-viewmode", mode); } catch { /* 無視 */ }
+  $("#view-merged").classList.toggle("active", mode === "merged");
+  $("#view-split").classList.toggle("active", mode === "split");
+  renderRowsTable(currentRows);
+}
+
+// 起動時に前回の表示形式を反映
+$("#view-merged").classList.toggle("active", viewMode === "merged");
+$("#view-split").classList.toggle("active", viewMode === "split");
 
 // レコード詳細: 1件の全項目を基準↔比較で縦に並べて照合表示
 function showRecordDetail(r) {

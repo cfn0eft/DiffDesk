@@ -216,6 +216,14 @@ details[open].card summary { border-bottom-color: var(--border); margin-bottom: 
 .progress .p-miss { background: #c05a4e; }
 #diff-table tbody tr { cursor: pointer; }
 #diff-table .matchcell { white-space: nowrap; }
+/* 左右分割表示 */
+#diff-table .grouphead th { text-align: center; font-size: 12px; }
+#diff-table .side-a-h { background: #cfd8cd; }
+#diff-table .side-b-h { background: #d6d2c4; }
+#diff-table .b-sep { border-left: 3px double var(--border-strong); }
+#diff-table td.absent { background: #eceae3; color: #9a958a; text-align: center; }
+.viewmode { padding: 2px 12px; }
+.viewmode.active { background: var(--accent); color: #fff; border-color: #2c362f; font-weight: bold; }
 tr.detail-ok td:first-child { color: #2e6b28; font-weight: bold; }
 tr.detail-ng td { background: var(--yellow-cell); }
 tr.detail-ng td:first-child { color: var(--danger); font-weight: bold; }
