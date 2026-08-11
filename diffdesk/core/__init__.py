@@ -29,9 +29,20 @@ from .loader_errors import (
     find_error_column,
 )
 from .diff import apply_filter, diff_tables
+from .recipe import (
+    RECIPE_OPS,
+    apply_recipe,
+    describe_op,
+    list_recipes,
+    load_recipe,
+    save_recipe,
+)
 from .edit import (
+    concat_columns,
+    conditional_column,
     dedupe_rows,
     split_column,
+    substring_column,
     delete_column,
     delete_rows,
     insert_column,

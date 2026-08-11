@@ -149,6 +149,84 @@ def split_column(table: Table, column: str, delimiter: str,
     return table, n_parts
 
 
+def _new_column_name(table: Table, name: str) -> str:
+    name = name.strip()
+    if not name:
+        raise DiffDeskError("新しい列名を指定してください。")
+    if name in table.columns:
+        raise DiffDeskError(f"列名が重複しています: {name}", column=name)
+    return name
+
+
+def concat_columns(table: Table, columns: list[str], new_name: str,
+                   separator: str = "") -> Table:
+    """複数列を区切り文字で結合した新しい列を末尾に追加する。"""
+    if len(columns) < 2:
+        raise DiffDeskError("結合する列を2つ以上選択してください。")
+    idx = [table.col_index(c) for c in columns]
+    name = _new_column_name(table, new_name)
+    table.columns.append(name)
+    for row in table.rows:
+        row.append(separator.join(row[i] for i in idx))
+    return table
+
+
+def substring_column(table: Table, column: str, new_name: str,
+                     start: int = 1, length: int | None = None) -> Table:
+    """列の一部を切り出した新しい列を末尾に追加する(startは1始まり)。"""
+    if start < 1:
+        raise DiffDeskError("開始位置は1以上で指定してください。")
+    i = table.col_index(column)
+    name = _new_column_name(table, new_name)
+    table.columns.append(name)
+    begin = start - 1
+    end = None if length is None else begin + int(length)
+    for row in table.rows:
+        row.append(row[i][begin:end])
+    return table
+
+
+_COND_OPS = ("eq", "ne", "contains", "not_contains", "gte", "lte", "empty", "not_empty")
+
+
+def conditional_column(table: Table, column: str, op: str, value: str,
+                       new_name: str, then_value: str, else_value: str) -> Table:
+    """条件分岐(IF)で新しい列を末尾に追加する。
+
+    then/else の値に「{値}」と書くと元の列の値がそのまま入る。
+    """
+    if op not in _COND_OPS:
+        raise DiffDeskError(f"不明な条件です: {op}", op=op)
+    i = table.col_index(column)
+    name = _new_column_name(table, new_name)
+    table.columns.append(name)
+
+    def test(v: str) -> bool:
+        if op == "eq":
+            return v == value
+        if op == "ne":
+            return v != value
+        if op == "contains":
+            return value in v
+        if op == "not_contains":
+            return value not in v
+        if op == "empty":
+            return v.strip() == ""
+        if op == "not_empty":
+            return v.strip() != ""
+        try:  # gte / lte
+            n, target = float(v), float(value)
+        except ValueError:
+            return False
+        return n >= target if op == "gte" else n <= target
+
+    for row in table.rows:
+        v = row[i]
+        out = then_value if test(v) else else_value
+        row.append(out.replace("{値}", v))
+    return table
+
+
 def dedupe_rows(table: Table) -> tuple[Table, int]:
     """完全一致の重複行を削除し、削除件数を返す(最初の1件を残す)。"""
     seen: set[tuple[str, ...]] = set()

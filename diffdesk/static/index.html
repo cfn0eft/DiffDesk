@@ -12,9 +12,9 @@
   <h1><img src="/static/icon.svg" alt="" class="applogo">DiffDesk <span class="tagline">― CSV比較・編集</span></h1>
   <nav id="tabs">
     <button data-tab="tab-load" class="active">1. ファイル読み込み</button>
-    <button data-tab="tab-map">2. 列マッピング</button>
-    <button data-tab="tab-diff">3. 差分結果</button>
-    <button data-tab="tab-grid">4. グリッド編集</button>
+    <button data-tab="tab-map">2. 紐づけ設定</button>
+    <button data-tab="tab-diff">3. 照合結果</button>
+    <button data-tab="tab-grid">4. 編集・整形</button>
   </nav>
 </header>
 
@@ -23,7 +23,7 @@
 <section id="tab-load" class="tab active">
   <div class="two-col">
     <div class="card" id="card-a">
-      <h2>ファイルA <span class="hint">(正マスタ / 元のExcel)</span></h2>
+      <h2>基準ファイル A <span class="hint">(正しいデータ側: Excel台帳・マスタ等)</span></h2>
       <div class="dropzone" data-side="a">
         ここにファイルをドロップ<br>または <label class="filebtn">ファイルを選択<input type="file" data-side="a" hidden></label>
         <div class="hint">CSV / TSV / Excel(.xlsx)</div>
@@ -32,7 +32,7 @@
       <div class="preview" data-side="a"></div>
     </div>
     <div class="card" id="card-b">
-      <h2>ファイルB <span class="hint">(比較対象 / Salesforceエクスポート)</span></h2>
+      <h2>比較ファイル B <span class="hint">(照合したい相手: システムからのエクスポート等)</span></h2>
       <div class="dropzone" data-side="b">
         ここにファイルをドロップ<br>または <label class="filebtn">ファイルを選択<input type="file" data-side="b" hidden></label>
         <div class="hint">CSV / TSV / Excel(.xlsx)</div>
@@ -162,8 +162,9 @@
   <div id="diff-empty" class="card"><p>まだ差分を実行していません。「2. 列マッピング」から実行してください。</p></div>
   <div id="diff-body" hidden>
     <div class="card" id="verify-card">
-      <h2>投入検証 <span class="hint">(A=投入元マスタ、B=投入後のSalesforceエクスポートとして判定)</span></h2>
+      <h2>照合判定 <span class="hint">(A=基準、B=比較対象。全レコードが正しく登録されているかを判定)</span></h2>
       <div id="verify-banner"></div>
+      <div id="verify-progress"></div>
       <div class="toolbar">
         <span id="verify-counts"></span>
       </div>
@@ -191,23 +192,28 @@
         <button id="diff-next">次へ</button>
       </div>
       <div class="scroll-x"><table id="diff-table"></table></div>
-      <p class="hint">変更セルは「A側の値 → B側の値」。マージで採用する側をクリックで選択できます(既定はA)。</p>
+      <p class="hint">変更セルは「A側の値 → B側の値」(マージで採用する側をクリックで選択、既定はA)。<b>行をクリックすると全項目の照合詳細</b>を表示します。</p>
     </div>
     <div id="diff-statusbar" class="statusbar"></div>
     <div class="card">
       <h2>出力</h2>
       <div class="toolbar wrap">
-        <button id="btn-export-upsert" class="primary">Data Loader用アップサートCSV</button>
-        <button id="btn-export-delete" class="danger">削除用CSV (Bのみ行)</button>
-        <button id="btn-export-sdl">.sdlマッピング</button>
-        <button id="btn-export-report-csv">差分レポートCSV</button>
-        <button id="btn-export-report-xlsx">差分レポートExcel(色付き)</button>
-        <button id="btn-export-html">共有用HTMLレポート</button>
-        <button id="btn-export-restore" title="変更対象行の投入前のSalesforce値をupdate用CSVとして保存。投入後にこのCSVをupdateすれば元に戻せます">復元用CSV(投入前のSF値)</button>
+        <button id="btn-export-report-csv">照合レポートCSV</button>
+        <button id="btn-export-report-xlsx">照合レポートExcel(色付き)</button>
+        <button id="btn-export-html" class="primary">共有用HTMLレポート</button>
         <span class="spacer"></span>
         <label><input type="checkbox" id="merge-include-b"> Bのみ行も含める</label>
         <button id="btn-merge">マージ結果を新規ファイル化</button>
       </div>
+      <details class="card sub">
+        <summary>Salesforce連携(Data Loader用の出力)</summary>
+        <div class="toolbar wrap">
+          <button id="btn-export-upsert" class="primary">アップサートCSV</button>
+          <button id="btn-export-restore" title="変更対象行の投入前のSalesforce値をupdate用CSVとして保存。投入後にこのCSVをupdateすれば元に戻せます">復元用CSV(投入前のSF値)</button>
+          <button id="btn-export-delete" class="danger">削除用CSV (Bのみ行)</button>
+          <button id="btn-export-sdl">.sdlマッピング</button>
+        </div>
+      </details>
     </div>
   </div>
 </section>
@@ -297,6 +303,53 @@
         <span id="cluster-status" class="hint"></span>
       </div>
       <div id="cluster-list"></div>
+    </details>
+    <details class="card sub">
+      <summary>計算列(結合・切り出し・条件分岐で新しい列を作る)</summary>
+      <div class="toolbar wrap">
+        <label>種類: <select id="calc-mode">
+          <option value="concat">列の結合</option>
+          <option value="substring">切り出し</option>
+          <option value="conditional">条件分岐(IF)</option>
+        </select></label>
+        <input id="calc-name" placeholder="新しい列名" size="12">
+      </div>
+      <div class="toolbar wrap" id="calc-concat-row">
+        <label>結合する列(Ctrlで複数): <select id="calc-cols" multiple size="3"></select></label>
+        <label>区切り: <input id="calc-sep" size="6" placeholder="(なし)"></label>
+      </div>
+      <div class="toolbar wrap" id="calc-substr-row" hidden>
+        <label>対象列: <select id="calc-col-s"></select></label>
+        <label>開始位置: <input id="calc-start" type="number" min="1" value="1" style="width:64px"></label>
+        <label>文字数: <input id="calc-len" type="number" min="1" placeholder="末尾まで" style="width:80px"></label>
+      </div>
+      <div class="toolbar wrap" id="calc-cond-row" hidden>
+        <label>対象列: <select id="calc-col-c"></select></label>
+        <select id="calc-op">
+          <option value="eq">＝</option><option value="ne">≠</option>
+          <option value="contains">を含む</option><option value="not_contains">を含まない</option>
+          <option value="gte">以上</option><option value="lte">以下</option>
+          <option value="empty">が空</option><option value="not_empty">が空でない</option>
+        </select>
+        <input id="calc-value" placeholder="比較値" size="10">
+        <label>真: <input id="calc-then" placeholder="例: OK / {値}" size="10"></label>
+        <label>偽: <input id="calc-else" placeholder="例: NG" size="10"></label>
+      </div>
+      <div class="toolbar">
+        <button id="calc-do" class="primary">列を作成</button>
+        <span class="hint">「{値}」と書くと元の値がそのまま入ります(条件分岐)</span>
+      </div>
+    </details>
+    <details class="card sub">
+      <summary>レシピ(整形操作の記録・保存・再適用)</summary>
+      <div class="toolbar wrap">
+        <button id="recipe-show">このファイルの操作履歴を表示</button>
+        <input id="recipe-name" placeholder="レシピ名(例: 月次整形)" size="14">
+        <button id="recipe-save" class="primary">履歴をレシピとして保存</button>
+        <label>保存済みレシピ: <select id="recipe-select"><option value="">(選択)</option></select></label>
+        <button id="recipe-apply">このファイルに適用</button>
+      </div>
+      <div id="recipe-log" class="hint"></div>
     </details>
     <details class="card sub">
       <summary>クロス集計(群構成チェック等)</summary>

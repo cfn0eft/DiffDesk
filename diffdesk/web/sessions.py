@@ -17,6 +17,7 @@ class FileEntry:
     raw: bytes
     table: Table | None = None
     parse_params: dict = field(default_factory=dict)
+    ops: list = field(default_factory=list)  # 適用した整形操作の履歴(レシピ用)
 
 
 class SessionStore:
@@ -61,6 +62,12 @@ class SessionStore:
         with self._lock:
             self._files[entry.file_id] = entry
         return entry
+
+    def log_op(self, file_id: str, op: str, params: dict) -> None:
+        """整形操作をファイルの履歴に記録する(レシピとして保存・再適用できる)。"""
+        entry = self.get_file(file_id)
+        with self._lock:
+            entry.ops.append({"op": op, "params": params})
 
     def delete_file(self, file_id: str) -> None:
         with self._lock:

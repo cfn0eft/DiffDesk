@@ -227,6 +227,9 @@ function fillColumnSelectors() {
   $("#anon-col").innerHTML = opts;
   $("#ct-row").innerHTML = opts;
   $("#ct-col").innerHTML = `<option value="">(なし=度数集計)</option>` + opts;
+  $("#calc-cols").innerHTML = opts;
+  $("#calc-col-s").innerHTML = opts;
+  $("#calc-col-c").innerHTML = opts;
 }
 
 // ---------------------------------------------------------------- 操作
@@ -545,6 +548,86 @@ export function initGrid() {
       toast("集計結果を新規ファイルとして保存しました");
       const { refreshFileList } = await import("/static/app.js");
       refreshFileList();
+    } catch (e) { toast(e.message, true); }
+  };
+
+  // ---- 計算列
+  $("#calc-mode").onchange = () => {
+    const m = $("#calc-mode").value;
+    $("#calc-concat-row").hidden = m !== "concat";
+    $("#calc-substr-row").hidden = m !== "substring";
+    $("#calc-cond-row").hidden = m !== "conditional";
+  };
+
+  $("#calc-do").onclick = async () => {
+    if (!await ensureSaved()) return;
+    const mode = $("#calc-mode").value;
+    const name = $("#calc-name").value.trim();
+    if (!name) return toast("新しい列名を入力してください", true);
+    const body = { mode, new_name: name };
+    if (mode === "concat") {
+      body.columns = [...$("#calc-cols").selectedOptions].map(o => o.value);
+      body.separator = $("#calc-sep").value;
+    } else if (mode === "substring") {
+      body.column = $("#calc-col-s").value;
+      body.start = parseInt($("#calc-start").value || "1", 10);
+      body.length = $("#calc-len").value === "" ? null : parseInt($("#calc-len").value, 10);
+    } else {
+      body.column = $("#calc-col-c").value;
+      body.op = $("#calc-op").value;
+      body.value = $("#calc-value").value;
+      body.then_value = $("#calc-then").value;
+      body.else_value = $("#calc-else").value;
+    }
+    try {
+      await postJson(`/api/files/${grid.fileId}/calc-column`, body);
+      toast(`列「${name}」を作成しました`);
+      await loadGridFile(grid.fileId);
+    } catch (e) { toast(e.message, true); }
+  };
+
+  // ---- レシピ
+  async function refreshRecipes() {
+    try {
+      const { recipes } = await apiJson("/api/recipes");
+      $("#recipe-select").innerHTML = `<option value="">(選択)</option>` +
+        recipes.map(r => `<option>${escapeHtml(r)}</option>`).join("");
+    } catch { /* 無視 */ }
+  }
+  refreshRecipes();
+
+  $("#recipe-show").onclick = async () => {
+    if (!grid.fileId) return toast("先にファイルを読み込んでください", true);
+    try {
+      const r = await apiJson(`/api/files/${grid.fileId}/recipe`);
+      $("#recipe-log").innerHTML = r.labels.length
+        ? "<b>操作履歴:</b><br>" + r.labels.map((l, i) => `${i + 1}. ${escapeHtml(l)}`).join("<br>")
+        : "このファイルにはまだ記録された整形操作がありません(クレンジング・置換・分割・計算列などを行うと記録されます)。";
+    } catch (e) { toast(e.message, true); }
+  };
+
+  $("#recipe-save").onclick = async () => {
+    if (!grid.fileId) return toast("先にファイルを読み込んでください", true);
+    const name = $("#recipe-name").value.trim();
+    if (!name) return toast("レシピ名を入力してください", true);
+    try {
+      const r = await postJson("/api/recipes", { name, file_id: grid.fileId });
+      toast(`レシピ「${name}」を保存しました(${r.count}操作)。別のファイルに再適用できます。`);
+      refreshRecipes();
+    } catch (e) { toast(e.message, true); }
+  };
+
+  $("#recipe-apply").onclick = async () => {
+    if (!grid.fileId) return toast("先にファイルを読み込んでください", true);
+    const name = $("#recipe-select").value;
+    if (!name) return toast("適用するレシピを選択してください", true);
+    if (!await ensureSaved()) return;
+    try {
+      const r = await postJson(`/api/files/${grid.fileId}/apply-recipe`, { name });
+      $("#recipe-log").innerHTML = "<b>適用結果:</b><br>" +
+        r.logs.map((l, i) => `${i + 1}. ${escapeHtml(l)}`).join("<br>");
+      toast(`レシピ「${name}」を適用しました(${r.logs.length}操作)`);
+      await loadGridFile(grid.fileId);
     } catch (e) { toast(e.message, true); }
   };
 
