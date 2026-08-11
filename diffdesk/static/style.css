@@ -34,6 +34,10 @@ header h1 {
 }
 header h1 .applogo { width: 20px; height: 20px; display: block; }
 header h1 .tagline { font-weight: normal; color: #b9c2bb; font-size: 12px; }
+header h1 .ver {
+  font-weight: normal; color: #8f978f; font-size: 11px; margin-left: 8px;
+  border: 1px solid #55605a; padding: 0 6px;
+}
 nav#tabs { display: flex; gap: 2px; align-self: flex-end; }
 nav#tabs button {
   background: #2f3a33; color: #b9c2bb; border: 1px solid #232c27; border-bottom: none;
@@ -277,8 +281,34 @@ details[open].card summary { border-bottom-color: var(--border); margin-bottom: 
 #link-overlay[hidden] { display: none; }
 #link-overlay line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
 #split-g td.linkable { cursor: grab; touch-action: none; user-select: none; }
-.linkdot { font-size: 13px; }
-#split-view tr.link-target td { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.linkdot { display: inline-block; font-size: 13px; animation: dd-pulse 1.6s ease-in-out infinite; }
+#split-g td.linkable:hover .linkdot { animation-duration: 0.6s; }
+@keyframes dd-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.65; }
+  50% { transform: scale(1.45); opacity: 1; }
+}
+#link-overlay line { animation: dd-march 0.5s linear infinite; }
+@keyframes dd-march { to { stroke-dashoffset: -20; } }
+#split-view tr.just-linked td { animation: dd-flash 1.4s ease-out; }
+@keyframes dd-flash {
+  0% { background-color: #eeca6e; }
+  100% { background-color: transparent; }
+}
+#drop-hint {
+  position: fixed; z-index: 99; pointer-events: none;
+  background: #6b675e; color: #fff; font-size: 11px; padding: 2px 8px;
+  white-space: nowrap;
+}
+#drop-hint.on-target { background: var(--accent); font-weight: 600; }
+#link-count b { color: var(--accent); }
+#split-view tr.link-target td {
+  outline: 2px dashed var(--accent); outline-offset: -2px;
+  animation: dd-target 0.8s ease-in-out infinite;
+}
+@keyframes dd-target {
+  0%, 100% { background-color: inherit; }
+  50% { background-color: #dfe6df; }
+}
 #split-g .g-manual { color: var(--accent); }
 /* 全画面表示 */
 body.diff-fs { overflow: hidden; }

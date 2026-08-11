@@ -480,3 +480,17 @@ class TestV080Features:
         r = client.post(f"/api/diff/{diff_id}/manual-pairs",
                         json={"key_a": ["0004"], "key_b": ["9999"]})
         assert r.status_code == 400
+
+
+class TestV081Serving:
+    def test_index_no_store_and_version_injected(self, client):
+        r = client.get("/")
+        assert r.headers["cache-control"] == "no-store"
+        from diffdesk import __version__
+        assert f"v{__version__}" in r.text
+        assert "{{V}}" not in r.text  # プレースホルダが残っていない
+
+    def test_static_requires_revalidation(self, client):
+        r = client.get("/static/app.js")
+        assert r.status_code == 200
+        assert r.headers["cache-control"] == "no-cache"

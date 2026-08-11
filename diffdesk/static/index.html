@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DiffDesk — CSV比較・編集ツール</title>
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v={{V}}">
 </head>
 <body>
 <header>
-  <h1><img src="/static/icon.svg" alt="" class="applogo">DiffDesk <span class="tagline">― CSV比較・編集</span></h1>
+  <h1><img src="/static/icon.svg" alt="" class="applogo">DiffDesk <span class="tagline">― CSV比較・編集</span><span class="ver" title="実行中のバージョン">v{{V}}</span></h1>
   <nav id="tabs">
     <button data-tab="tab-load" class="active">1. ファイル読み込み</button>
     <button data-tab="tab-map">2. 紐づけ設定</button>
@@ -224,7 +224,7 @@
         </div>
       </div>
       <p class="hint" id="merged-hint">変更セルは「A側の値 → B側の値」(マージで採用する側をクリックで選択、既定はA)。<b>行をクリックすると全項目の照合詳細</b>を表示します。</p>
-      <p class="hint" id="split-legend" hidden>同じ高さの行が対応するレコードです(左右スクロールも連動)。
+      <p class="hint" id="split-legend" hidden><span id="link-count"></span>同じ高さの行が対応するレコードです(左右スクロールも連動)。
         <span class="lg lg-del">赤 = 比較先に未登録(Aのみ)</span>
         <span class="lg lg-mod">黄 = 値の相違(濃い箇所が相違セル)</span>
         <span class="lg lg-add">緑 = 基準に無し(Bのみ)</span>
@@ -449,6 +449,7 @@
 <div id="toast" hidden></div>
 <dialog id="dialog"></dialog>
 
-<script type="module" src="/static/app.js"></script>
+<div id="drop-hint" hidden></div>
+<script type="module" src="/static/app.js?v={{V}}"></script>
 </body>
 </html>
