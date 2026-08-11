@@ -13,9 +13,18 @@ from ..core import (
     analyze_errors,
     anonymize_columns,
     apply_value_map,
+    build_html_report,
+    build_linked_table,
+    build_restore_table,
     build_retry_table,
+    build_undo_delete_table,
     build_verification,
     cluster_column,
+    compare_profiles,
+    crosstab,
+    fuzzy_match,
+    profile_table,
+    split_address_column,
     split_column,
     build_verification_table,
     build_verification_xlsx,
@@ -289,6 +298,7 @@ def validate_file(file_id: str, req: sc.ValidateRequest):
         formats=req.formats,
         max_lengths=req.max_lengths,
         allowed_values=req.allowed_values,
+        ranges=req.ranges,
     )
     issues = validate_table(table, rules)
     return {"count": len(issues), "issues": [i.to_dict() for i in issues[:500]]}
@@ -465,6 +475,109 @@ def export_verify(diff_id: str, req: sc.ExportVerifyRequest):
     table = build_verification_table(result, only_b_is_error=req.only_b_is_error)
     raw = write_csv(table, encoding=req.encoding)
     return _download(raw, "投入検証レポート.csv", "text/csv")
+
+
+@router.post("/export/restore/{diff_id}")
+def export_restore(diff_id: str, req: sc.ExportDeleteRequest):
+    """投入前のSF値による復元用update CSV(ロールバックキット)。"""
+    result = store.get_diff(diff_id)
+    table = build_restore_table(result)
+    raw = write_csv(table, encoding=req.encoding)
+    return _download(raw, "復元用_投入前のSF値.csv", "text/csv")
+
+
+@router.post("/files/{file_id}/undo-delete")
+def export_undo_delete(file_id: str, req: sc.ExportDeleteRequest):
+    """success.csvから新規作成レコードの取り消し用delete CSVを生成。"""
+    table = store.get_table(file_id)
+    undo, skipped = build_undo_delete_table(table)
+    raw = write_csv(undo, encoding=req.encoding)
+    resp = _download(raw, "取り消し用delete.csv", "text/csv")
+    resp.headers["X-Skipped-Updates"] = str(skipped)
+    return resp
+
+
+@router.post("/export/html/{diff_id}")
+def export_html(diff_id: str, req: sc.ExportHtmlRequest):
+    result = store.get_diff(diff_id)
+    html_text = build_html_report(result, only_b_is_error=req.only_b_is_error)
+    return _download(html_text.encode("utf-8"), "差分レポート.html", "text/html")
+
+
+# ---------------------------------------------------------------- 健康診断
+@router.post("/files/{file_id}/profile")
+def file_profile(file_id: str):
+    return profile_table(store.get_table(file_id))
+
+
+@router.get("/baselines")
+def get_baselines():
+    from ..core import list_baselines
+    return {"baselines": list_baselines()}
+
+
+@router.post("/files/{file_id}/save-baseline")
+def save_file_baseline(file_id: str, req: sc.BaselineSaveRequest):
+    from ..core import save_baseline
+    save_baseline(req.name, profile_table(store.get_table(file_id)))
+    return {"ok": True, "name": req.name}
+
+
+@router.post("/files/{file_id}/compare-baseline")
+def compare_file_baseline(file_id: str, req: sc.BaselineCompareRequest):
+    from ..core import load_baseline
+    baseline = load_baseline(req.name)
+    current = profile_table(store.get_table(file_id))
+    return {"warnings": compare_profiles(baseline, current)}
+
+
+# ---------------------------------------------------------------- あいまい突合
+@router.post("/fuzzy-match")
+def run_fuzzy_match(req: sc.FuzzyMatchRequest):
+    a = store.get_table(req.file_a)
+    b = store.get_table(req.file_b)
+    pairs = [(p[0], p[1]) for p in req.pairs]
+    candidates = fuzzy_match(a, b, pairs=pairs, threshold=req.threshold)
+    ia = [a.col_index(x) for x, _ in pairs]
+    ib = [b.col_index(y) for _, y in pairs]
+    out = []
+    for c in candidates:
+        out.append({
+            **c.to_dict(),
+            "values_a": [a.rows[c.index_a][i] for i in ia],
+            "values_b": [b.rows[c.index_b][i] for i in ib],
+        })
+    return {"count": len(out), "candidates": out,
+            "columns_a": [p[0] for p in pairs], "columns_b": [p[1] for p in pairs]}
+
+
+@router.post("/fuzzy-link")
+def run_fuzzy_link(req: sc.FuzzyLinkRequest):
+    a = store.get_table(req.file_a)
+    b = store.get_table(req.file_b)
+    out = build_linked_table(a, b, req.matches)
+    entry = store.add_table_as_file("あいまい突合結果.csv", out)
+    return _file_info(entry, out)
+
+
+# ---------------------------------------------------------------- 集計・住所
+@router.post("/files/{file_id}/crosstab")
+def file_crosstab(file_id: str, req: sc.CrosstabRequest):
+    table = store.get_table(file_id)
+    out = crosstab(table, req.row_col, req.col_col)
+    result = {"table": {"columns": out.columns, "rows": out.rows}}
+    if req.save_as_file:
+        entry = store.add_table_as_file("集計結果.csv", out)
+        result["file_id"] = entry.file_id
+    return result
+
+
+@router.post("/files/{file_id}/split-address")
+def split_address_file(file_id: str, req: sc.SplitAddressRequest):
+    table = store.get_table(file_id).copy()
+    table, parsed = split_address_column(table, req.column)
+    store.set_table(file_id, table)
+    return {"parsed": parsed, "preview": _preview(table)}
 
 
 # ---------------------------------------------------------------- profiles

@@ -246,6 +246,20 @@ $("#btn-export-report-xlsx").onclick = () => {
   if (state.diff) postDownload(`/api/export/report/${state.diff.diff_id}`,
     { format: "xlsx" }, "report.xlsx");
 };
+$("#btn-export-html").onclick = () => {
+  if (state.diff) postDownload(`/api/export/html/${state.diff.diff_id}`,
+    { only_b_is_error: !$("#verify-allow-b").checked }, "report.html");
+};
+$("#btn-export-restore").onclick = async () => {
+  if (!state.diff) return;
+  const ok = await showDialog(`<h2>復元用CSV(投入前のSF値)</h2>
+    <p>変更(update対象)行について、<strong>投入前のSalesforce側の値</strong>を
+    update用CSVとして保存します。</p>
+    <p>アップサート投入後に誤りに気づいた場合、このCSVをData Loaderで
+    updateすれば値を投入前に戻せます。<strong>投入前に必ず出力しておいてください。</strong></p>`);
+  if (!ok) return;
+  postDownload(`/api/export/restore/${state.diff.diff_id}`, {}, "restore.csv");
+};
 
 $("#btn-merge").onclick = async () => {
   const d = state.diff;

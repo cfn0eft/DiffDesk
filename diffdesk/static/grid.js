@@ -221,9 +221,12 @@ function fillColumnSelectors() {
   $("#val-required").innerHTML = opts;
   $("#val-format-col").innerHTML = `<option value="">(列)</option>` + opts;
   $("#val-allow-col").innerHTML = `<option value="">(列)</option>` + opts;
+  $("#val-range-col").innerHTML = `<option value="">(列)</option>` + opts;
   $("#cluster-col").innerHTML = opts;
   $("#split-col").innerHTML = opts;
   $("#anon-col").innerHTML = opts;
+  $("#ct-row").innerHTML = opts;
+  $("#ct-col").innerHTML = `<option value="">(なし=度数集計)</option>` + opts;
 }
 
 // ---------------------------------------------------------------- 操作
@@ -404,12 +407,21 @@ export function initGrid() {
       allowed_values[$("#val-allow-col").value] =
         $("#val-allow-values").value.split(",").map(v => v.trim()).filter(Boolean);
     }
+    const ranges = {};
+    if ($("#val-range-col").value &&
+        ($("#val-range-min").value !== "" || $("#val-range-max").value !== "")) {
+      ranges[$("#val-range-col").value] = [
+        $("#val-range-min").value === "" ? null : parseFloat($("#val-range-min").value),
+        $("#val-range-max").value === "" ? null : parseFloat($("#val-range-max").value),
+      ];
+    }
     try {
       const r = await postJson(`/api/files/${grid.fileId}/validate`, {
         key_columns: [...$("#val-keys").selectedOptions].map(o => o.value),
         required_columns: [...$("#val-required").selectedOptions].map(o => o.value),
         formats,
         allowed_values,
+        ranges,
       });
       $("#val-result").innerHTML = r.count === 0
         ? `<p>✅ 問題は見つかりませんでした。</p>`
@@ -491,6 +503,48 @@ export function initGrid() {
                                { column: col, delimiter: delim });
       toast(`「${col}」を${r.parts}列に分割しました`);
       await loadGridFile(grid.fileId);
+    } catch (e) { toast(e.message, true); }
+  };
+
+  // ---- 住所分割
+  $("#addr-do").onclick = async () => {
+    if (!await ensureSaved()) return;
+    const col = $("#split-col").value;
+    if (!col) return toast("列を選択してください", true);
+    try {
+      const r = await postJson(`/api/files/${grid.fileId}/split-address`, { column: col });
+      toast(`「${col}」を住所4列に分割しました(${r.parsed}行で都道府県等を検出)`);
+      await loadGridFile(grid.fileId);
+    } catch (e) { toast(e.message, true); }
+  };
+
+  // ---- クロス集計
+  $("#ct-do").onclick = async () => {
+    if (!await ensureSaved()) return;
+    const rowCol = $("#ct-row").value;
+    if (!rowCol) return toast("行に使う列を選択してください", true);
+    try {
+      const r = await postJson(`/api/files/${grid.fileId}/crosstab`, {
+        row_col: rowCol, col_col: $("#ct-col").value || null,
+      });
+      const t = r.table;
+      $("#ct-result").innerHTML =
+        `<table><thead><tr>${t.columns.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>` +
+        `<tbody>${t.rows.map(row =>
+          `<tr>${row.map(v => `<td>${escapeHtml(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+      $("#ct-save").hidden = false;
+    } catch (e) { toast(e.message, true); }
+  };
+
+  $("#ct-save").onclick = async () => {
+    try {
+      const r = await postJson(`/api/files/${grid.fileId}/crosstab`, {
+        row_col: $("#ct-row").value, col_col: $("#ct-col").value || null,
+        save_as_file: true,
+      });
+      toast("集計結果を新規ファイルとして保存しました");
+      const { refreshFileList } = await import("/static/app.js");
+      refreshFileList();
     } catch (e) { toast(e.message, true); }
   };
 

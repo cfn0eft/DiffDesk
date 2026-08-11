@@ -27,6 +27,42 @@ class ValidateRequest(BaseModel):
     formats: dict[str, str] = {}
     max_lengths: dict[str, int] = {}
     allowed_values: dict[str, list[str]] = {}
+    ranges: dict[str, list[float | None]] = {}
+
+
+class BaselineSaveRequest(BaseModel):
+    name: str
+
+
+class BaselineCompareRequest(BaseModel):
+    name: str
+
+
+class FuzzyMatchRequest(BaseModel):
+    file_a: str
+    file_b: str
+    pairs: list[list[str]]  # [[col_a, col_b], ...]
+    threshold: float = 0.75
+
+
+class FuzzyLinkRequest(BaseModel):
+    file_a: str
+    file_b: str
+    matches: list[dict]  # [{index_a, index_b, score}]
+
+
+class CrosstabRequest(BaseModel):
+    row_col: str
+    col_col: str | None = None
+    save_as_file: bool = False
+
+
+class SplitAddressRequest(BaseModel):
+    column: str
+
+
+class ExportHtmlRequest(BaseModel):
+    only_b_is_error: bool = True
 
 
 class ClusterRequest(BaseModel):
