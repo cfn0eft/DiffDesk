@@ -31,6 +31,7 @@ class ValidationRules:
     required_columns: list[str] = field(default_factory=list)  # 空セル禁止
     formats: dict[str, str] = field(default_factory=dict)      # 列名 -> FORMAT_CHECKSのキー
     max_lengths: dict[str, int] = field(default_factory=dict)  # 列名 -> 最大文字数
+    allowed_values: dict[str, list[str]] = field(default_factory=dict)  # 列名 -> 許可値(ピックリスト)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -42,6 +43,8 @@ class ValidationRules:
             required_columns=[str(c) for c in d.get("required_columns", [])],
             formats={str(k): str(v) for k, v in d.get("formats", {}).items()},
             max_lengths={str(k): int(v) for k, v in d.get("max_lengths", {}).items()},
+            allowed_values={str(k): [str(x) for x in v]
+                            for k, v in d.get("allowed_values", {}).items()},
         )
 
 
@@ -89,6 +92,8 @@ def validate_table(table: Table, rules: ValidationRules,
     req_idx = [(c, table.col_index(c)) for c in rules.required_columns]
     fmt_idx = [(c, table.col_index(c), f) for c, f in rules.formats.items()]
     len_idx = [(c, table.col_index(c), n) for c, n in rules.max_lengths.items()]
+    allow_idx = [(c, table.col_index(c), {v.strip() for v in vals})
+                 for c, vals in rules.allowed_values.items()]
 
     for ri, row in enumerate(table.rows, start=1):
         for col, i in req_idx:
@@ -108,5 +113,12 @@ def validate_table(table: Table, rules: ValidationRules,
                 if add(ValidationIssue(
                         row=ri, column=col, code="max_length", value=row[i],
                         message=f"{col} が最大文字数 {n} を超えています ({len(row[i])}文字)")):
+                    return issues
+        for col, i, allowed in allow_idx:
+            v = row[i].strip()
+            if v and v not in allowed:
+                if add(ValidationIssue(
+                        row=ri, column=col, code="allowed_values", value=v,
+                        message=f"{col} が許可値にありません: {v}")):
                     return issues
     return issues

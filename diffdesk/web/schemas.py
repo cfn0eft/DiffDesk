@@ -26,6 +26,30 @@ class ValidateRequest(BaseModel):
     required_columns: list[str] = []
     formats: dict[str, str] = {}
     max_lengths: dict[str, int] = {}
+    allowed_values: dict[str, list[str]] = {}
+
+
+class ClusterRequest(BaseModel):
+    column: str
+
+
+class ApplyMapRequest(BaseModel):
+    column: str
+    mapping: dict[str, str]
+
+
+class AnonymizeRequest(BaseModel):
+    spec: dict[str, str]  # 列名 -> モード
+
+
+class SplitColumnRequest(BaseModel):
+    column: str
+    delimiter: str
+
+
+class ColumnValuesRequest(BaseModel):
+    column: str
+    limit: int = 200
 
 
 class SearchRequest(BaseModel):

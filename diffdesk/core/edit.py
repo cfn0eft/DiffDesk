@@ -116,6 +116,39 @@ def replace_all(table: Table, query: str, replacement: str, *,
     return table, count
 
 
+def split_column(table: Table, column: str, delimiter: str,
+                 *, max_parts: int = 10) -> tuple[Table, int]:
+    """列を区切り文字で分割し、「列名_1」「列名_2」…に置き換える(Power QueryのSplit Column相当)。
+
+    分割数は実データの最大分割数(上限max_parts)。分割された列数を返す。
+    """
+    if not delimiter:
+        raise DiffDeskError("区切り文字を指定してください。")
+    i = table.col_index(column)
+    n_parts = 1
+    for row in table.rows:
+        n = min(row[i].count(delimiter) + 1, max_parts)
+        if n > n_parts:
+            n_parts = n
+    if n_parts == 1:
+        raise DiffDeskError(
+            f"区切り文字 {delimiter!r} が列「{column}」のどの値にも含まれていません。")
+    new_names = []
+    existing = set(table.columns) - {column}
+    for k in range(1, n_parts + 1):
+        name = f"{column}_{k}"
+        while name in existing:
+            name += "_x"
+        existing.add(name)
+        new_names.append(name)
+    table.columns[i:i + 1] = new_names
+    for row in table.rows:
+        parts = row[i].split(delimiter, n_parts - 1)
+        parts += [""] * (n_parts - len(parts))
+        row[i:i + 1] = parts
+    return table, n_parts
+
+
 def dedupe_rows(table: Table) -> tuple[Table, int]:
     """完全一致の重複行を削除し、削除件数を返す(最初の1件を残す)。"""
     seen: set[tuple[str, ...]] = set()

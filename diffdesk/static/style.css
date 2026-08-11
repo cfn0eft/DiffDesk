@@ -168,6 +168,10 @@ td.cell-changed { background: var(--yellow-cell) !important; }
 #grid-container table td input:focus { outline: 1px solid var(--accent); background: #fff; }
 #grid-container th { cursor: default; }
 #grid-container th .delcol { color: var(--danger); cursor: pointer; margin-left: 6px; }
+#grid-container th .sortbtn { color: var(--accent); cursor: pointer; margin-left: 6px; }
+#cluster-list .badge.warn { font-size: 12px; }
+#err-analysis table { margin-top: 6px; }
+#err-analysis td { white-space: normal; }
 #grid-container td.rowsel { text-align: center; padding: 2px; }
 
 details.card summary {

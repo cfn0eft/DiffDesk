@@ -7,8 +7,16 @@ from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import Response
 
 from ..core import (
+    ANONYMIZE_MODES,
     CLEAN_OPS,
+    COLUMN_OPS,
+    analyze_errors,
+    anonymize_columns,
+    apply_value_map,
+    build_retry_table,
     build_verification,
+    cluster_column,
+    split_column,
     build_verification_table,
     build_verification_xlsx,
     suggest_mapping,
@@ -198,7 +206,78 @@ def clean_file(file_id: str, req: sc.CleanRequest):
 
 @router.get("/clean-ops")
 def clean_ops():
-    return {"ops": [{"id": k, "label": v[0]} for k, v in CLEAN_OPS.items()]}
+    ops = [{"id": k, "label": v[0]} for k, v in CLEAN_OPS.items()]
+    ops += [{"id": k, "label": label} for k, label in COLUMN_OPS.items()]
+    return {"ops": ops}
+
+
+@router.get("/anonymize-modes")
+def anonymize_modes():
+    return {"modes": [{"id": k, "label": v} for k, v in ANONYMIZE_MODES.items()]}
+
+
+@router.post("/files/{file_id}/clusters")
+def get_clusters(file_id: str, req: sc.ClusterRequest):
+    table = store.get_table(file_id)
+    clusters = cluster_column(table, req.column)
+    return {"count": len(clusters), "clusters": [c.to_dict() for c in clusters]}
+
+
+@router.post("/files/{file_id}/apply-map")
+def apply_map(file_id: str, req: sc.ApplyMapRequest):
+    table = store.get_table(file_id).copy()
+    table, changed = apply_value_map(table, req.column, req.mapping)
+    store.set_table(file_id, table)
+    return {"changed": changed}
+
+
+@router.post("/files/{file_id}/analyze-errors")
+def analyze_error_file(file_id: str):
+    table = store.get_table(file_id)
+    return analyze_errors(table).to_dict()
+
+
+@router.post("/export/retry/{file_id}")
+def export_retry(file_id: str, req: sc.ExportTableRequest):
+    table = store.get_table(file_id)
+    retry = build_retry_table(table)
+    raw = write_csv(retry, encoding=req.encoding, errors=req.errors)
+    return _download(raw, "再投入用.csv", "text/csv")
+
+
+@router.post("/files/{file_id}/anonymize")
+def anonymize_file(file_id: str, req: sc.AnonymizeRequest):
+    table = store.get_table(file_id)
+    out, changed = anonymize_columns(table, req.spec)
+    entry = store.add_table_as_file(f"{store.get_file(file_id).filename}_匿名化.csv", out)
+    info = _file_info(entry, out)
+    info["changed"] = changed
+    return info
+
+
+@router.post("/files/{file_id}/split-column")
+def split_column_file(file_id: str, req: sc.SplitColumnRequest):
+    table = store.get_table(file_id).copy()
+    table, n_parts = split_column(table, req.column, req.delimiter)
+    store.set_table(file_id, table)
+    return {"parts": n_parts, "preview": _preview(table)}
+
+
+@router.post("/files/{file_id}/column-values")
+def column_values(file_id: str, req: sc.ColumnValuesRequest):
+    """列のユニーク値一覧(許可値リストの自動生成用)。"""
+    table = store.get_table(file_id)
+    i = table.col_index(req.column)
+    values: list[str] = []
+    seen: set[str] = set()
+    for row in table.rows:
+        v = row[i].strip()
+        if v and v not in seen:
+            seen.add(v)
+            values.append(v)
+            if len(values) >= max(1, min(req.limit, 1000)):
+                break
+    return {"values": values, "truncated": len(values) >= req.limit}
 
 
 @router.post("/files/{file_id}/validate")
@@ -209,6 +288,7 @@ def validate_file(file_id: str, req: sc.ValidateRequest):
         required_columns=req.required_columns,
         formats=req.formats,
         max_lengths=req.max_lengths,
+        allowed_values=req.allowed_values,
     )
     issues = validate_table(table, rules)
     return {"count": len(issues), "issues": [i.to_dict() for i in issues[:500]]}

@@ -132,6 +132,15 @@ export async function refreshFileList() {
       <td>${f.total_rows}</td><td>${f.columns.length}</td>
       <td><button class="mini file-del" data-id="${f.file_id}">削除</button></td>
     </tr>`).join("") + `</tbody></table>`;
+  // エラーファイル分析・許可値取得用のファイルセレクトも更新
+  for (const selId of ["#err-file-select", "#val-allow-src-file"]) {
+    const sel = $(selId);
+    if (!sel) continue;
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">(選択)</option>` + files.map(f =>
+      `<option value="${f.file_id}">${escapeHtml(f.filename)}</option>`).join("");
+    if (files.some(f => f.file_id === cur)) sel.value = cur;
+  }
   el.querySelectorAll(".file-del").forEach(b => b.onclick = async () => {
     await api(`/api/files/${b.dataset.id}`, { method: "DELETE" });
     if (state.fileA?.file_id === b.dataset.id) { state.fileA = null; renderParsePanel("a"); renderPreview("a"); }
@@ -179,6 +188,36 @@ $("#btn-convert").onclick = async () => {
   } catch (e) { toast(e.message, true); }
 };
 
+// ---------------------------------------------------------------- Data Loaderエラーファイル分析
+$("#btn-analyze-errors").onclick = async () => {
+  const fid = $("#err-file-select").value;
+  if (!fid) return toast("分析するファイルを選択してください", true);
+  try {
+    const r = await postJson(`/api/files/${fid}/analyze-errors`, {});
+    const rows = r.categories.map(c =>
+      `<tr><td>${escapeHtml(c.label)}</td><td>${c.count}</td>` +
+      `<td class="hint">${escapeHtml(c.hint)}</td>` +
+      `<td class="hint" style="max-width:380px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(c.example)}</td></tr>`).join("");
+    $("#err-analysis").innerHTML =
+      `<p><b>${r.total_rows}行</b>の失敗レコード(ERROR列: ${escapeHtml(r.error_column)})</p>` +
+      `<table><thead><tr><th>エラー分類</th><th>件数</th><th>対処ヒント</th><th>メッセージ例</th></tr></thead>` +
+      `<tbody>${rows}</tbody></table>`;
+  } catch (e) { toast(e.message, true); }
+};
+
+$("#btn-export-retry").onclick = async () => {
+  const fid = $("#err-file-select").value;
+  if (!fid) return toast("対象ファイルを選択してください", true);
+  try {
+    const res = await api(`/api/export/retry/${fid}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ encoding: "utf-8-sig" }),
+    });
+    await downloadResponse(res, "retry.csv");
+    toast("再投入用CSVを出力しました(ERROR/STATUS列を除去済み)");
+  } catch (e) { toast(e.message, true); }
+};
+
 // ---------------------------------------------------------------- マッピング
 const FILTER_OPS = [
   ["eq", "＝"], ["ne", "≠"], ["contains", "を含む"], ["not_contains", "を含まない"],
@@ -215,7 +254,7 @@ function renderMappingTable() {
     <td>↔</td>
     <td><select data-i="${i}" data-f="col_b">${colOptions(colsB, p.col_b)}</select></td>
     <td style="text-align:center"><input type="checkbox" data-i="${i}" data-f="is_key" ${p.is_key ? "checked" : ""}></td>
-    <td><input data-i="${i}" data-f="sf_field" value="${escapeHtml(p.sf_field || "")}" placeholder="${escapeHtml(p.col_b)}" size="18"></td>
+    <td><input data-i="${i}" data-f="sf_field" value="${escapeHtml(p.sf_field || "")}" placeholder="${escapeHtml(p.col_b)}" size="18" title="Data Loader出力時のSalesforce項目名。親レコードを外部IDで参照する場合は Account:ExtId__c の形式で指定できます"></td>
     <td><button class="mini danger" data-del="${i}">×</button></td>
   </tr>`).join("");
   tbody.querySelectorAll("select,input").forEach(el => {
