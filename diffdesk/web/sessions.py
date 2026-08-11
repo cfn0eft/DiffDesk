@@ -25,7 +25,6 @@ class SessionStore:
         self._lock = threading.Lock()
         self._files: dict[str, FileEntry] = {}
         self._diffs: dict[str, DiffResult] = {}
-        self._manual_pairs: dict[str, list[dict]] = {}  # diff_id -> 手動紐づけ
 
     # ---- files
     def add_file(self, filename: str, raw: bytes) -> FileEntry:
@@ -86,8 +85,6 @@ class SessionStore:
             self._diffs[diff_id] = result
             while len(self._diffs) > self.MAX_DIFFS:
                 self._diffs.pop(next(iter(self._diffs)))
-            for stale in set(self._manual_pairs) - set(self._diffs):
-                self._manual_pairs.pop(stale, None)
         return diff_id
 
     def get_diff(self, diff_id: str) -> DiffResult:
@@ -95,30 +92,6 @@ class SessionStore:
         if result is None:
             raise DiffDeskError(f"差分結果が見つかりません(再実行してください): {diff_id}")
         return result
-
-    # ---- 手動紐づけ(差分結果ごと)
-    def get_manual_pairs(self, diff_id: str) -> list[dict]:
-        return list(self._manual_pairs.get(diff_id, []))
-
-    def add_manual_pair(self, diff_id: str, pair: dict) -> list[dict]:
-        self.get_diff(diff_id)  # 存在確認
-        with self._lock:
-            pairs = self._manual_pairs.setdefault(diff_id, [])
-            if pair not in pairs:
-                pairs.append(pair)
-            return list(pairs)
-
-    def remove_manual_pair(self, diff_id: str, index: int) -> list[dict]:
-        with self._lock:
-            pairs = self._manual_pairs.get(diff_id, [])
-            if not 0 <= index < len(pairs):
-                raise DiffDeskError(f"手動紐づけの番号が不正です: {index}")
-            pairs.pop(index)
-            return list(pairs)
-
-    def clear_manual_pairs(self, diff_id: str) -> None:
-        with self._lock:
-            self._manual_pairs.pop(diff_id, None)
 
 
 store = SessionStore()

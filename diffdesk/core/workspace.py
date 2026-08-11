@@ -1,4 +1,4 @@
-"""ワークスペースの永続データ(既知差分・照合履歴・ユーザー辞書)。
+"""ワークスペースの永続データ(既知差分・照合履歴・ユーザー辞書・手動紐づけ)。
 
 保存先: ~/.diffdesk/ 配下(プロファイルと同じ場所)。
 """
@@ -97,6 +97,49 @@ def load_history(*, limit: int = 100, directory: Path | None = None) -> list[dic
 
 def clear_history(*, directory: Path | None = None) -> None:
     _save_json(_data_dir(directory) / "history.json", [])
+
+
+# ---------------------------------------------------------------- 手動紐づけ
+# 形式: {"key_a": [...], "key_b": [...], "note": str, "score": float|None,
+#        "added_at": iso8601}
+# キーの組で保存するため、同じファイルで差分を再実行しても自動で再適用される。
+
+def load_manual_links(*, directory: Path | None = None) -> list[dict]:
+    return _load_json(_data_dir(directory) / "manual_links.json", [])
+
+
+def add_manual_link(entry: dict, *, directory: Path | None = None) -> list[dict]:
+    key_a = entry.get("key_a")
+    key_b = entry.get("key_b")
+    for name, key in (("key_a", key_a), ("key_b", key_b)):
+        if not isinstance(key, list) or not key:
+            raise DiffDeskError(f"手動紐づけの {name} は文字列のリストで指定してください。")
+    key_a = [str(k) for k in key_a]
+    key_b = [str(k) for k in key_b]
+    entries = load_manual_links(directory=directory)
+    if any(e["key_a"] == key_a and e["key_b"] == key_b for e in entries):
+        return entries  # 重複登録は無視
+    score = entry.get("score")
+    entries.append({
+        "key_a": key_a, "key_b": key_b,
+        "note": str(entry.get("note", ""))[:500],
+        "score": round(float(score), 3) if isinstance(score, (int, float)) else None,
+        "added_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    })
+    _save_json(_data_dir(directory) / "manual_links.json", entries)
+    return entries
+
+
+def remove_manual_link(index: int, *, directory: Path | None = None) -> list[dict]:
+    entries = load_manual_links(directory=directory)
+    if 0 <= index < len(entries):
+        entries.pop(index)
+        _save_json(_data_dir(directory) / "manual_links.json", entries)
+    return entries
+
+
+def clear_manual_links(*, directory: Path | None = None) -> None:
+    _save_json(_data_dir(directory) / "manual_links.json", [])
 
 
 # ---------------------------------------------------------------- ユーザー辞書

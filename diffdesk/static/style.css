@@ -362,3 +362,13 @@ dialog label { display: block; margin-top: 8px; margin-bottom: 8px; }
 #file-list table { margin-bottom: 6px; }
 #val-result { max-height: 240px; overflow: auto; font-size: 12px; margin-top: 6px; }
 #val-result .issue { color: var(--danger); }
+/* 紐づけ精度担保(v0.9.0) */
+#drop-hint.low-match { background: #a33c34; }
+.link-warn {
+  margin: 4px 12px; padding: 4px 8px; background: #f6e3e1;
+  border: 1px solid #c8968f; color: #7c2d25; font-size: 12px;
+}
+#suggest-list table, #links-list table { width: 100%; }
+#suggest-list td, #links-list td { vertical-align: top; }
+#ai-answer { font-family: inherit; font-size: 12px; box-sizing: border-box; }
+#ai-rejected { color: #7c2d25; }

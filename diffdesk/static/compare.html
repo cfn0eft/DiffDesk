@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DiffDesk — 見比べビューア</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css?v={{V}}">
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  main { flex: 1; display: flex; gap: 8px; min-height: 0; padding: 8px 10px; }
+  .cmp-col { flex: 1 1 50%; min-width: 0; display: flex; flex-direction: column; }
+  .cmp-head { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+  .cmp-head select { max-width: 46%; }
+  .cmp-head input[type=search] { flex: 1; min-width: 120px; }
+  .cmp-pane {
+    flex: 1; overflow: auto; border: 1px solid var(--border-strong);
+    background: var(--panel); min-height: 0;
+  }
+  .cmp-pane table { border-collapse: collapse; min-width: 100%; }
+  .cmp-pane th, .cmp-pane td {
+    padding: 3px 8px; border-bottom: 1px solid var(--border);
+    white-space: nowrap; max-width: 340px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cmp-pane thead th {
+    position: sticky; top: 0; background: #e3e0d6; z-index: 1;
+    border-bottom: 1px solid var(--border-strong); text-align: left;
+  }
+  .cmp-pane .rownum {
+    color: #8a857a; text-align: right; background: #efede6;
+    border-right: 1px solid var(--border); font-variant-numeric: tabular-nums;
+  }
+  .cmp-pane tr.hl td { background: #e6ece6; }
+  .cmp-pane mark { background: #f2df9a; padding: 0; }
+  body.fs-s .cmp-pane table { font-size: 11px; }
+  body.fs-m .cmp-pane table { font-size: 13px; }
+  body.fs-l .cmp-pane table { font-size: 15px; }
+  .cmp-info { color: #8a857a; font-size: 11px; }
+  header .note { color: #b9c2bb; font-size: 12px; margin-left: 12px; }
+  #cmp-toolbar { display: flex; gap: 14px; align-items: center; padding: 6px 10px;
+    background: var(--toolbar); border-bottom: 1px solid var(--border-strong);
+    font-size: 12px; flex-wrap: wrap; }
+  #cmp-toolbar label { display: flex; gap: 4px; align-items: center; }
+</style>
+</head>
+<body class="fs-m">
+<header>
+  <h1><img src="/static/icon.svg" alt="" class="applogo">DiffDesk
+    <span class="tagline">― 見比べビューア</span><span class="ver">v{{V}}</span>
+    <span class="note">確認専用 — この画面からは編集・照合できません</span></h1>
+</header>
+<div id="cmp-toolbar">
+  <label><input type="checkbox" id="sync-scroll" checked>縦スクロール同期</label>
+  <label><input type="checkbox" id="sync-hover" checked>行ハイライト連動</label>
+  <label>文字サイズ
+    <select id="font-size">
+      <option value="fs-s">小</option>
+      <option value="fs-m" selected>中</option>
+      <option value="fs-l">大</option>
+    </select></label>
+  <button id="reload-files" class="mini">ファイル一覧を更新</button>
+  <span class="hint">※ 本体アプリで読み込んだファイルがここに表示されます</span>
+</div>
+<main>
+  <div class="cmp-col">
+    <div class="cmp-head">
+      <select data-side="l"><option value="">(左: ファイルを選択)</option></select>
+      <input type="search" data-side="l" placeholder="絞り込み(含む行だけ表示)">
+      <span class="cmp-info" data-side="l"></span>
+    </div>
+    <div class="cmp-pane" data-side="l"><table></table></div>
+  </div>
+  <div class="cmp-col">
+    <div class="cmp-head">
+      <select data-side="r"><option value="">(右: ファイルを選択)</option></select>
+      <input type="search" data-side="r" placeholder="絞り込み(含む行だけ表示)">
+      <span class="cmp-info" data-side="r"></span>
+    </div>
+    <div class="cmp-pane" data-side="r"><table></table></div>
+  </div>
+</main>
+<div id="toast" hidden></div>
+<script type="module" src="/static/compare.js?v={{V}}"></script>
+</body>
+</html>

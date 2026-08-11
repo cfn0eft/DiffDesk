@@ -50,6 +50,9 @@ export function renderDiff() {
   loadColumnsSummary();
   loadHistory();
   loadKnownList();
+  loadLinkList();
+  suggestItems = [];
+  renderSuggestList();
   loadRows();
 }
 
@@ -144,6 +147,7 @@ function refreshAfterKnownChange() {
     loadVerification();
     loadColumnsSummary();
     loadRows();
+    loadLinkList();
   }
 }
 
@@ -476,12 +480,33 @@ let pendingFlashKey = null;  // 紐づけ直後にフラッシュ表示する行
 function showDropHint(e, onTarget) {
   const hint = $("#drop-hint");
   hint.hidden = false;
+  const pv = onTarget && linkDrag ? linkDrag.preview : null;
   hint.classList.toggle("on-target", onTarget);
+  hint.classList.toggle("low-match", !!pv && pv.score < 0.4);
   hint.textContent = onTarget
-    ? "ここに落として紐づけ"
+    ? "ここに落として紐づけ" +
+      (pv ? ` — 一致率${Math.round(pv.score * 100)}%(${pv.matched}/${pv.total}項目)` : "")
     : "相手側の赤/緑の行まで紐を伸ばす";
   hint.style.left = `${e.clientX + 14}px`;
   hint.style.top = `${e.clientY + 18}px`;
+}
+
+// ドロップ候補に重なったら一致率を取得してガイドに表示する
+async function fetchDragPreview(drag, targetTr, e) {
+  const d = state.diff;
+  const rSrc = currentRows[drag.ri];
+  const rDst = currentRows[+targetTr.dataset.ri];
+  if (!d || !rSrc || !rDst) return;
+  const [keyA, keyB] = drag.status === "only_a"
+    ? [rSrc.key, rDst.key] : [rDst.key, rSrc.key];
+  try {
+    const pv = await postJson(`/api/diff/${d.diff_id}/pair-preview`,
+      { key_a: [...keyA], key_b: [...keyB] });
+    if (linkDrag === drag && drag.targetTr === targetTr) {
+      drag.preview = pv;
+      showDropHint(e, true);
+    }
+  } catch { /* ガイドの補足情報なので失敗は無視 */ }
 }
 
 function autoScrollPane(e) {
@@ -535,15 +560,19 @@ document.addEventListener("pointermove", e => {
   line.setAttribute("x2", x); line.setAttribute("y2", y);
   autoScrollPane(e);
   const target = dropTargetAt(e, linkDrag);
-  showDropHint(e, !!target);
   if (target !== linkDrag.targetTr) {
     clearLinkTargets();
     linkDrag.targetTr = target;
-    if (target) SPLIT_TABLES.forEach(sel => {
-      const t = document.querySelector(`${sel} tbody tr[data-ri="${target.dataset.ri}"]`);
-      if (t) t.classList.add("link-target");
-    });
+    linkDrag.preview = null;
+    if (target) {
+      SPLIT_TABLES.forEach(sel => {
+        const t = document.querySelector(`${sel} tbody tr[data-ri="${target.dataset.ri}"]`);
+        if (t) t.classList.add("link-target");
+      });
+      fetchDragPreview(linkDrag, target, e);
+    }
   }
+  showDropHint(e, !!target);
 });
 
 document.addEventListener("pointerup", e => {
@@ -561,19 +590,77 @@ document.addEventListener("pointerup", e => {
   if (!rSrc || !rDst) return;
   const [keyA, keyB] = drag.status === "only_a"
     ? [rSrc.key, rDst.key] : [rDst.key, rSrc.key];
-  registerManualPair(keyA, keyB);
+  confirmLinkDialog(keyA, keyB);  // 即登録せず、内容と一致率の確認を挟む
 });
 
-async function registerManualPair(keyA, keyB) {
+async function registerManualPair(keyA, keyB, note = "", score = null) {
   const d = state.diff;
-  if (!d) return;
+  if (!d) return false;
   try {
     await postJson(`/api/diff/${d.diff_id}/manual-pairs`,
-      { key_a: [...keyA], key_b: [...keyB] });
-    toast(`「${keyA.join("/")}」と「${keyB.join("/")}」を手動で紐づけました(⇔印)。詳細画面から解除できます。`);
+      { key_a: [...keyA], key_b: [...keyB], note, score });
+    toast(`「${keyA.join("/")}」と「${keyB.join("/")}」を手動で紐づけました(⇔印)。管理パネルと詳細画面から解除できます。`);
     pendingFlashKey = JSON.stringify([...keyA]);
+    removeSuggestFor(keyA, keyB);
     refreshAfterKnownChange();
-  } catch (e) { toast(e.message, true); }
+    return true;
+  } catch (e) {
+    toast(e.message, true);
+    return false;
+  }
+}
+
+// 紐づけの確認ダイアログ: 登録前に必ず2行の中身と一致率を見せる(正確性担保)
+async function confirmLinkDialog(keyA, keyB, opts = {}) {
+  const d = state.diff;
+  if (!d) return;
+  let pv;
+  try {
+    pv = await postJson(`/api/diff/${d.diff_id}/pair-preview`,
+      { key_a: [...keyA], key_b: [...keyB] });
+  } catch (e) { return toast(e.message, true); }
+  const pct = Math.round(pv.score * 100);
+  const rowsHtml = pv.columns.map(c => {
+    const mark = c.sim >= 0.999 ? "✔" : c.sim >= 0.5 ? "≈" : "✖";
+    const cls = c.sim >= 0.999 ? "detail-ok" : c.sim >= 0.5 ? "" : "detail-ng";
+    const label = c.col_a === c.col_b ? c.col_a : `${c.col_a} / ${c.col_b}`;
+    return `<tr class="${cls}"><td>${mark}</td><td>${escapeHtml(label)}</td>` +
+      `<td>${escapeHtml(c.value_a)}</td><td>${escapeHtml(c.value_b)}</td>` +
+      `<td class="hint">${Math.round(c.sim * 100)}%</td></tr>`;
+  }).join("");
+  const warn = pv.score < 0.4
+    ? `<p class="link-warn">⚠ 一致率が低い組合せです。本当に同じレコードか、値をよく確認してください。</p>`
+    : "";
+  const reason = opts.reason
+    ? `<p style="margin:4px 12px" class="hint">提案理由: ${escapeHtml(opts.reason)}</p>` : "";
+  const dlg = $("#dialog");
+  dlg.innerHTML = `<h2>紐づけの確認 — ${escapeHtml(keyA.join("/"))} ⇔ ${escapeHtml(keyB.join("/"))}</h2>
+    <p style="margin:8px 12px"><b>一致率 ${pct}%</b>(完全一致 ${pv.matched}/${pv.total}項目)</p>
+    ${warn}${reason}
+    <div style="margin:0 12px; max-height:50vh; overflow:auto">
+    <table><thead><tr><th></th><th>項目</th><th>基準 (A)</th><th>比較 (B)</th><th>類似</th></tr></thead>
+    <tbody>${rowsHtml}</tbody></table></div>
+    <div class="toolbar">
+      <input id="link-note" placeholder="メモ(任意・検証レポートに記録されます)" style="flex:1" value="${escapeHtml(opts.note || "")}">
+      <button id="link-confirm" class="primary">紐づけ確定 (Enter)</button>
+      <button data-cancel>キャンセル</button>
+    </div>`;
+  const doConfirm = async () => {
+    dlg.onkeydown = null;
+    const note = dlg.querySelector("#link-note")?.value?.trim() ?? "";
+    dlg.close();
+    await registerManualPair(keyA, keyB, note, pv.score);
+  };
+  dlg.querySelector("[data-cancel]").onclick = () => { dlg.onkeydown = null; dlg.close(); };
+  dlg.querySelector("#link-confirm").onclick = doConfirm;
+  dlg.onkeydown = e => {
+    if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+      e.preventDefault();
+      doConfirm();
+      dlg.onkeydown = null;
+    }
+  };
+  dlg.showModal();
 }
 
 async function unlinkManualPair(r) {
@@ -589,6 +676,167 @@ async function unlinkManualPair(r) {
     refreshAfterKnownChange();
   } catch (e) { toast(e.message, true); }
 }
+
+// ---------------------------------------------------------------- 手動紐づけの管理一覧
+async function loadLinkList() {
+  const d = state.diff;
+  if (!d) return;
+  try {
+    const { pairs } = await (await api(`/api/diff/${d.diff_id}/manual-pairs`)).json();
+    if (!pairs.length) {
+      $("#links-list").innerHTML = `<p class="hint">登録済みの手動紐づけはありません。</p>`;
+      return;
+    }
+    $("#links-list").innerHTML =
+      `<table><thead><tr><th>基準(A)キー</th><th></th><th>比較(B)キー</th>` +
+      `<th>一致率</th><th>メモ</th><th>登録日時</th><th></th></tr></thead><tbody>` +
+      pairs.map((p, i) =>
+        `<tr><td>${escapeHtml(p.key_a.join("/"))}</td><td>⇔</td>` +
+        `<td>${escapeHtml(p.key_b.join("/"))}</td>` +
+        `<td>${p.score == null ? "" : Math.round(p.score * 100) + "%"}</td>` +
+        `<td>${escapeHtml(p.note || "")}</td>` +
+        `<td class="hint">${escapeHtml(p.added_at || "")}</td>` +
+        `<td><button class="mini danger link-del" data-i="${i}">削除</button></td></tr>`
+      ).join("") + `</tbody></table>`;
+    $$(".link-del").forEach(b => b.onclick = async () => {
+      await api(`/api/diff/${d.diff_id}/manual-pairs/${b.dataset.i}`, { method: "DELETE" });
+      toast("手動紐づけを削除しました。");
+      refreshAfterKnownChange();
+    });
+  } catch { /* 差分未実行時などは表示しない */ }
+}
+$("#links-refresh").onclick = loadLinkList;
+$("#links-clear").onclick = async () => {
+  const d = state.diff;
+  if (!d) return;
+  await api(`/api/diff/${d.diff_id}/manual-pairs`, { method: "DELETE" });
+  toast("手動紐づけを全て削除しました。");
+  refreshAfterKnownChange();
+};
+
+// ---------------------------------------------------------------- 紐づけ候補の提案
+let suggestItems = [];  // {key_a, key_b, score, label_a, label_b, source, reason}
+
+function removeSuggestFor(keyA, keyB) {
+  const ka = JSON.stringify([...keyA]);
+  const kb = JSON.stringify([...keyB]);
+  const before = suggestItems.length;
+  suggestItems = suggestItems.filter(it =>
+    JSON.stringify(it.key_a) !== ka && JSON.stringify(it.key_b) !== kb);
+  if (suggestItems.length !== before) renderSuggestList();
+}
+
+function renderSuggestList() {
+  const box = $("#suggest-list");
+  if (!suggestItems.length) {
+    box.innerHTML = `<p class="hint">候補はありません。「候補を自動提案」を押すか、下のAI連携をお使いください。</p>`;
+    return;
+  }
+  box.innerHTML =
+    `<table><thead><tr><th>一致率</th><th>基準(A)</th><th></th><th>比較(B)</th>` +
+    `<th>提案元</th><th></th></tr></thead><tbody>` +
+    suggestItems.map((it, i) => {
+      const pct = it.score == null ? "—" : Math.round(it.score * 100) + "%";
+      const src = it.source === "ai"
+        ? `AI${it.reason ? `<span class="hint" title="${escapeHtml(it.reason)}">(理由あり)</span>` : ""}`
+        : "自動";
+      return `<tr><td><b>${pct}</b></td>` +
+        `<td>${escapeHtml(it.label_a || it.key_a.join("/"))}</td><td>⇔</td>` +
+        `<td>${escapeHtml(it.label_b || it.key_b.join("/"))}</td>` +
+        `<td>${src}</td>` +
+        `<td><button class="mini primary sug-ok" data-i="${i}">確認して承認</button> ` +
+        `<button class="mini sug-ng" data-i="${i}">却下</button></td></tr>`;
+    }).join("") + `</tbody></table>`;
+  $$(".sug-ok").forEach(b => b.onclick = () => {
+    const it = suggestItems[+b.dataset.i];
+    confirmLinkDialog(it.key_a, it.key_b, {
+      reason: it.reason,
+      note: it.source === "ai" ? `AI提案を承認${it.reason ? ": " + it.reason.slice(0, 100) : ""}` : "自動提案を承認",
+    });
+  });
+  $$(".sug-ng").forEach(b => b.onclick = () => {
+    suggestItems.splice(+b.dataset.i, 1);
+    renderSuggestList();
+  });
+}
+
+$("#suggest-run").onclick = async () => {
+  const d = state.diff;
+  if (!d) return toast("先に差分を実行してください。", true);
+  try {
+    const r = await postJson(`/api/diff/${d.diff_id}/link-suggest`,
+      { threshold: +$("#suggest-th").value, limit: 100 });
+    suggestItems = r.candidates.map(c => ({ ...c, source: "auto" }));
+    renderSuggestList();
+    $("#suggest-info").textContent = suggestItems.length
+      ? `${suggestItems.length}件の候補が見つかりました`
+      : "しきい値以上の候補はありませんでした(しきい値を下げるか、AI連携をお試しください)";
+  } catch (e) { toast(e.message, true); }
+};
+
+$("#suggest-accept-high").onclick = async () => {
+  const d = state.diff;
+  if (!d) return;
+  const targets = suggestItems.filter(it => (it.score ?? 0) >= 0.9);
+  if (!targets.length) return toast("一致率90%以上の候補がありません。", true);
+  let done = 0;
+  for (const it of targets) {
+    const okRes = await registerManualPair(it.key_a, it.key_b,
+      it.source === "ai" ? "一括承認(AI提案)" : "一括承認(自動提案)", it.score);
+    if (okRes) done += 1;
+  }
+  toast(`${done}件を一括で紐づけました。`);
+};
+
+// ---------------------------------------------------------------- Web版AI連携(コピペ)
+$("#ai-prompt-copy").onclick = async () => {
+  const d = state.diff;
+  if (!d) return toast("先に差分を実行してください。", true);
+  try {
+    const r = await (await api(`/api/diff/${d.diff_id}/link-prompt`)).json();
+    try {
+      await navigator.clipboard.writeText(r.prompt);
+      $("#ai-prompt-info").textContent =
+        `A${r.rows_a}行 × B${r.rows_b}行を含むプロンプトをコピーしました。Web版AIに貼り付けてください。`;
+      toast("プロンプトをコピーしました。");
+    } catch {
+      // クリップボードが使えない環境: ダイアログに表示して手動コピー
+      const dlg = $("#dialog");
+      dlg.innerHTML = `<h2>AI用プロンプト(全選択してコピーしてください)</h2>
+        <textarea readonly style="width:95%; height:50vh; margin:0 12px">${escapeHtml(r.prompt)}</textarea>
+        <div class="toolbar"><button data-cancel class="primary">閉じる</button></div>`;
+      dlg.querySelector("[data-cancel]").onclick = () => dlg.close();
+      dlg.showModal();
+      dlg.querySelector("textarea").select();
+    }
+  } catch (e) { toast(e.message, true); }
+};
+
+$("#ai-import").onclick = async () => {
+  const d = state.diff;
+  if (!d) return toast("先に差分を実行してください。", true);
+  const text = $("#ai-answer").value;
+  try {
+    const r = await postJson(`/api/diff/${d.diff_id}/link-import`, { text });
+    const imported = r.pairs.map(p => ({
+      key_a: p.key_a, key_b: p.key_b, score: p.score,
+      reason: p.reason, source: "ai",
+    }));
+    // 既存候補と重複しないものだけ追加
+    const seen = new Set(suggestItems.map(it =>
+      JSON.stringify([it.key_a, it.key_b])));
+    for (const it of imported) {
+      const k = JSON.stringify([it.key_a, it.key_b]);
+      if (!seen.has(k)) { suggestItems.push(it); seen.add(k); }
+    }
+    suggestItems.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+    renderSuggestList();
+    $("#ai-rejected").innerHTML = r.rejected.length
+      ? `取り込めなかった項目:<br>` + r.rejected.map(escapeHtml).join("<br>")
+      : "";
+    toast(`${imported.length}件の候補を取り込みました。内容を確認して承認してください。`);
+  } catch (e) { toast(e.message, true); }
+};
 
 // ---------------------------------------------------------------- 全画面表示
 $("#btn-fullscreen").onclick = () => setFullscreen(!document.body.classList.contains("diff-fs"));
@@ -665,20 +913,24 @@ function showRecordDetail(r) {
     <div style="margin:0 12px; max-height:60vh; overflow:auto">
     <table><thead><tr><th></th><th>項目</th><th>基準 (A)</th><th>比較 (B)</th><th></th></tr></thead>
     <tbody>${rowsHtml}</tbody></table></div>
+    <p id="manual-meta" class="hint" style="margin:4px 12px"></p>
     <div class="toolbar">${missingKnownBtn}${linkUi}${unlinkBtn}<button data-cancel class="primary">閉じる</button></div>`;
+  dlg.onkeydown = null;  // 紐づけ確認ダイアログのEnterハンドラを引き継がない
   dlg.querySelector("[data-cancel]").onclick = () => dlg.close();
   const linkDo = dlg.querySelector("#link-do");
   if (linkDo) {
     const side = r.status === "only_a" ? "b" : "a";  // 相手側の候補を出す
     (async () => {
       try {
+        const rank = encodeURIComponent(JSON.stringify([...r.key]));
         const { rows: cands } = await (await api(
-          `/api/diff/${d.diff_id}/unmatched?side=${side}`)).json();
+          `/api/diff/${d.diff_id}/unmatched?side=${side}&rank_for=${rank}`)).json();
         const sel = dlg.querySelector("#link-select");
-        sel.innerHTML = `<option value="">(紐づける相手を選択 — ${cands.length}件)</option>` +
-          cands.map(c =>
-            `<option value='${escapeHtml(JSON.stringify(c.key))}'>${escapeHtml(c.label)}</option>`
-          ).join("");
+        sel.innerHTML = `<option value="">(紐づける相手を選択 — 一致率順 ${cands.length}件)</option>` +
+          cands.map(c => {
+            const pct = c.score == null ? "" : `[${Math.round(c.score * 100)}%] `;
+            return `<option value='${escapeHtml(JSON.stringify(c.key))}'>${pct}${escapeHtml(c.label)}</option>`;
+          }).join("");
       } catch { /* 候補が取れなくてもダイアログ自体は使える */ }
     })();
     linkDo.onclick = () => {
@@ -687,11 +939,27 @@ function showRecordDetail(r) {
       const other = JSON.parse(v);
       const [keyA, keyB] = r.status === "only_a" ? [[...r.key], other] : [other, [...r.key]];
       dlg.close();
-      registerManualPair(keyA, keyB);
+      confirmLinkDialog(keyA, keyB);  // 内容と一致率の確認を挟む
     };
   }
   const unlink = dlg.querySelector("#link-undo");
   if (unlink) unlink.onclick = () => unlinkManualPair(r);
+  if (r.manual) {
+    // 監査記録(メモ・一致率・登録日時)を表示
+    (async () => {
+      try {
+        const { pairs } = await (await api(`/api/diff/${d.diff_id}/manual-pairs`)).json();
+        const p = pairs.find(x => JSON.stringify(x.key_a) === JSON.stringify([...r.key]));
+        if (p) {
+          const meta = dlg.querySelector("#manual-meta");
+          if (meta) meta.textContent =
+            `手動紐づけの記録: ${p.added_at || ""}` +
+            (p.score == null ? "" : ` / 登録時一致率 ${Math.round(p.score * 100)}%`) +
+            (p.note ? ` / メモ: ${p.note}` : "");
+        }
+      } catch { /* 表示のみ */ }
+    })();
+  }
   dlg.querySelectorAll(".known-cell-btn").forEach(b => b.onclick = () => {
     const cd = r.cell_diffs.find(x => x.col_a === b.dataset.col);
     if (cd) registerKnown({ type: "cell", key: [...r.key], col_a: cd.col_a,

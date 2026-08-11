@@ -1,6 +1,7 @@
 """APIエンドポイント。ロジックは全て diffdesk.core に委譲する。"""
 from __future__ import annotations
 
+import json
 import urllib.parse
 
 from fastapi import APIRouter, File, UploadFile
@@ -17,7 +18,15 @@ from ..core import (
     apply_known_diffs,
     apply_manual_pairs,
     DiffDeskError,
+    add_manual_link,
+    build_link_prompt,
+    clear_manual_links,
     list_unmatched,
+    load_manual_links,
+    pair_similarity,
+    parse_link_answer,
+    remove_manual_link,
+    suggest_links,
     validate_manual_pair,
     clear_history,
     clear_known_diffs,
@@ -390,8 +399,12 @@ def enrich_file(file_id: str, req: sc.EnrichRequest):
 # ---------------------------------------------------------------- mapping/diff
 
 def _diff_with_known(diff_id: str):
-    """保存済み差分に手動紐づけ→既知差分の順で適用して返す(元は変更しない)。"""
-    diff = apply_manual_pairs(store.get_diff(diff_id), store.get_manual_pairs(diff_id))
+    """保存済み差分に手動紐づけ→既知差分の順で適用して返す(元は変更しない)。
+
+    手動紐づけはキーの組でワークスペースに永続化されるため、同じファイルで
+    差分を再実行しても自動で再適用される(該当行がない組は黙って無視)。
+    """
+    diff = apply_manual_pairs(store.get_diff(diff_id), load_manual_links())
     return apply_known_diffs(diff, load_known_diffs())
 
 
@@ -400,7 +413,7 @@ def _diff_with_known(diff_id: str):
 @router.get("/diff/{diff_id}/manual-pairs")
 def get_manual_pairs(diff_id: str):
     store.get_diff(diff_id)
-    return {"pairs": store.get_manual_pairs(diff_id)}
+    return {"pairs": load_manual_links()}
 
 
 @router.post("/diff/{diff_id}/manual-pairs")
@@ -414,25 +427,60 @@ def add_manual_pair(diff_id: str, req: sc.ManualPairRequest):
     if statuses.get(tuple(pair["key_b"])) != "only_b":
         raise DiffDeskError(
             f"比較(B)側のキー {'/'.join(pair['key_b'])} は未対応(Bのみ)の行ではありません。")
-    pairs = store.add_manual_pair(diff_id, pair)
+    pairs = add_manual_link({**pair, "note": req.note, "score": req.score})
     return {"pairs": pairs, "count": len(pairs)}
 
 
 @router.delete("/diff/{diff_id}/manual-pairs/{index}")
 def delete_manual_pair(diff_id: str, index: int):
-    pairs = store.remove_manual_pair(diff_id, index)
+    pairs = remove_manual_link(index)
     return {"pairs": pairs, "count": len(pairs)}
 
 
 @router.delete("/diff/{diff_id}/manual-pairs")
 def clear_manual_pairs(diff_id: str):
-    store.clear_manual_pairs(diff_id)
+    clear_manual_links()
     return {"pairs": [], "count": 0}
 
 
 @router.get("/diff/{diff_id}/unmatched")
-def unmatched_rows(diff_id: str, side: str):
-    return {"rows": list_unmatched(_diff_with_known(diff_id), side)}
+def unmatched_rows(diff_id: str, side: str, rank_for: str = ""):
+    """未対応行の一覧。rank_for=反対側行のキー(JSON配列)を渡すと一致率順。"""
+    rank_key = None
+    if rank_for:
+        try:
+            parsed = json.loads(rank_for)
+            if isinstance(parsed, list):
+                rank_key = [str(k) for k in parsed]
+        except json.JSONDecodeError:
+            pass  # 並べ替えなしで返す
+    return {"rows": list_unmatched(_diff_with_known(diff_id), side,
+                                   rank_for=rank_key)}
+
+
+@router.post("/diff/{diff_id}/pair-preview")
+def pair_preview(diff_id: str, req: sc.ManualPairRequest):
+    """紐づけ前の類似度プレビュー(確認ダイアログ・ドラッグ中ガイド用)。"""
+    return pair_similarity(_diff_with_known(diff_id), req.key_a, req.key_b)
+
+
+@router.post("/diff/{diff_id}/link-suggest")
+def link_suggest(diff_id: str, req: sc.LinkSuggestRequest):
+    """未対応行同士のおすすめ紐づけ候補(スコア順・1対1)。"""
+    return {"candidates": suggest_links(_diff_with_known(diff_id),
+                                        threshold=req.threshold, limit=req.limit)}
+
+
+@router.get("/diff/{diff_id}/link-prompt")
+def link_prompt(diff_id: str):
+    """Web版の対話AIに貼り付ける紐づけ判定プロンプトを生成(AIは呼ばない)。"""
+    return build_link_prompt(_diff_with_known(diff_id))
+
+
+@router.post("/diff/{diff_id}/link-import")
+def link_import(diff_id: str, req: sc.LinkImportRequest):
+    """AI回答テキストからJSONを抽出し、実在する未対応行の組だけ候補として返す。"""
+    return parse_link_answer(_diff_with_known(diff_id), req.text)
 
 
 @router.post("/automap")
