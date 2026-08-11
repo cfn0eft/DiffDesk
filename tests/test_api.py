@@ -226,6 +226,57 @@ class TestDiffFlow:
         assert "キー" in r.json()["error"]["message"]
 
 
+class TestV040Features:
+    def test_clusters_and_apply(self, client):
+        raw = "会社\n株式会社テスト\nテスト(株)\n別会社\n".encode("utf-8")
+        fid = upload(client, "c.csv", raw)["file_id"]
+        r = client.post(f"/api/files/{fid}/clusters", json={"column": "会社"}).json()
+        assert r["count"] == 1
+        mapping = {"テスト(株)": "株式会社テスト"}
+        r = client.post(f"/api/files/{fid}/apply-map",
+                        json={"column": "会社", "mapping": mapping}).json()
+        assert r["changed"] == 1
+
+    def test_error_analysis_and_retry(self, client):
+        raw = ("氏名,ERROR\n山田,REQUIRED_FIELD_MISSING:必須項目\n"
+               "鈴木,UNABLE_TO_LOCK_ROW:ロック\n").encode("utf-8")
+        fid = upload(client, "error.csv", raw)["file_id"]
+        r = client.post(f"/api/files/{fid}/analyze-errors").json()
+        assert r["total_rows"] == 2 and len(r["categories"]) == 2
+        res = client.post(f"/api/export/retry/{fid}", json={})
+        text = res.content.decode("utf-8-sig")
+        assert text.splitlines()[0] == "氏名"  # ERROR列除去
+        assert len(text.strip().splitlines()) == 3
+
+    def test_anonymize_creates_new_file(self, client):
+        fid = upload(client, "m.csv", load_fixture("master_utf8.csv"))["file_id"]
+        r = client.post(f"/api/files/{fid}/anonymize",
+                        json={"spec": {"氏名": "name", "メール": "email"}}).json()
+        assert r["changed"] == 10
+        assert r["file_id"] != fid
+        assert "@example.com" in r["preview"]["rows"][0][1]
+
+    def test_split_column(self, client):
+        raw = "氏名\n山田 太郎\n鈴木 花子\n".encode("utf-8")
+        fid = upload(client, "s.csv", raw)["file_id"]
+        r = client.post(f"/api/files/{fid}/split-column",
+                        json={"column": "氏名", "delimiter": " "}).json()
+        assert r["parts"] == 2
+        assert r["preview"]["columns"] == ["氏名_1", "氏名_2"]
+
+    def test_column_values_and_allowed_validation(self, client):
+        fid = upload(client, "m.csv", load_fixture("master_utf8.csv"))["file_id"]
+        r = client.post(f"/api/files/{fid}/column-values", json={"column": "部署"}).json()
+        assert set(r["values"]) == {"営業部", "開発部", "総務部"}
+        v = client.post(f"/api/files/{fid}/validate",
+                        json={"allowed_values": {"部署": ["営業部", "開発部"]}}).json()
+        assert v["count"] == 1  # 総務部が許可外
+
+    def test_clean_ops_includes_fill_down(self, client):
+        ops = {o["id"] for o in client.get("/api/clean-ops").json()["ops"]}
+        assert {"fill_down", "digits_only", "alnum_han"} <= ops
+
+
 class TestProfiles:
     def test_save_load_list_delete(self, client):
         profile = {

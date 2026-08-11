@@ -14,6 +14,9 @@ const grid = {
   page: 0,
   dirty: false,
   undoStack: [],
+  viewFilter: "",
+  sortCol: null,
+  sortDir: 1,
 };
 
 // undoは表全体のコピーではなく操作の逆変換だけを記録する(大規模データ対応)
@@ -43,6 +46,9 @@ function applyUndo(e) {
       break;
     case "rename":
       grid.columns[e.index] = e.old;
+      break;
+    case "roworder":  // ソート前の並びに戻す(行参照の共有でメモリ効率良)
+      grid.rows = e.rows;
       break;
   }
 }
@@ -96,21 +102,57 @@ async function loadGridFile(fileId) {
 }
 
 // ---------------------------------------------------------------- 描画
+function visibleIndices() {
+  const q = grid.viewFilter.trim().toLowerCase();
+  if (!q) return null;  // フィルタなし=全行
+  const idx = [];
+  grid.rows.forEach((r, i) => {
+    if (r.some(v => v.toLowerCase().includes(q))) idx.push(i);
+  });
+  return idx;
+}
+
+function sortByColumn(ci) {
+  pushUndo({ type: "roworder", rows: [...grid.rows] });
+  const dir = (grid.sortCol === ci && grid.sortDir === 1) ? -1 : 1;
+  grid.sortCol = ci;
+  grid.sortDir = dir;
+  grid.rows.sort((a, b) => {
+    const x = a[ci], y = b[ci];
+    const nx = parseFloat(x), ny = parseFloat(y);
+    let cmp;
+    if (x.trim() !== "" && y.trim() !== "" && !isNaN(nx) && !isNaN(ny)) cmp = nx - ny;
+    else cmp = x.localeCompare(y, "ja");
+    return dir * cmp;
+  });
+  markDirty();
+  renderGrid();
+}
+
 function renderGrid() {
   const container = $("#grid-container");
   if (!grid.fileId) { container.innerHTML = `<p class="hint">ファイルを選択して「読み込み」を押してください。</p>`; return; }
+  const vis = visibleIndices();
+  const totalVisible = vis ? vis.length : grid.rows.length;
   const start = grid.page * PAGE_SIZE;
-  const rows = grid.rows.slice(start, start + PAGE_SIZE);
+  const pageIdx = vis
+    ? vis.slice(start, start + PAGE_SIZE)
+    : Array.from({ length: Math.max(0, Math.min(PAGE_SIZE, grid.rows.length - start)) },
+                 (_, k) => start + k);
   const head = `<tr><th></th>` + grid.columns.map((c, i) =>
     `<th data-col="${i}"><span class="colname" title="ダブルクリックで列名変更">${escapeHtml(c)}</span>` +
+    `<span class="sortbtn" data-col="${i}" title="この列でソート">⇅</span>` +
     `<span class="delcol" data-col="${i}" title="列を削除">×</span></th>`).join("") + `</tr>`;
-  const body = rows.map((r, ri) => {
-    const rowIdx = start + ri;
+  const body = pageIdx.map(rowIdx => {
+    const r = grid.rows[rowIdx];
     return `<tr data-row="${rowIdx}"><td class="rowsel"><input type="checkbox" class="rowcheck" data-row="${rowIdx}"></td>` +
       r.map((v, ci) =>
         `<td><input value="${escapeHtml(v)}" data-row="${rowIdx}" data-col="${ci}"></td>`).join("") + `</tr>`;
   }).join("");
   container.innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  container.querySelectorAll(".sortbtn").forEach(el => {
+    el.onclick = () => sortByColumn(+el.dataset.col);
+  });
 
   container.querySelectorAll("tbody input:not(.rowcheck)").forEach(inp => {
     inp.onfocus = () => { inp.dataset.orig = inp.value; };
@@ -161,13 +203,14 @@ function renderGrid() {
       fillColumnSelectors();
     };
   });
-  const totalPages = Math.max(1, Math.ceil(grid.rows.length / PAGE_SIZE));
-  if (grid.page >= totalPages) {  // 行削除等でページが範囲外になったら戻す
+  const totalPages = Math.max(1, Math.ceil(totalVisible / PAGE_SIZE));
+  if (grid.page >= totalPages) {  // 行削除・フィルタでページが範囲外になったら戻す
     grid.page = totalPages - 1;
     renderGrid();
     return;
   }
-  $("#grid-page-info").textContent = `ページ ${grid.page + 1} / ${totalPages}`;
+  $("#grid-page-info").textContent = `ページ ${grid.page + 1} / ${totalPages}` +
+    (vis ? `(フィルタ一致 ${totalVisible}行)` : "");
 }
 
 function fillColumnSelectors() {
@@ -177,6 +220,10 @@ function fillColumnSelectors() {
   $("#val-keys").innerHTML = opts;
   $("#val-required").innerHTML = opts;
   $("#val-format-col").innerHTML = `<option value="">(列)</option>` + opts;
+  $("#val-allow-col").innerHTML = `<option value="">(列)</option>` + opts;
+  $("#cluster-col").innerHTML = opts;
+  $("#split-col").innerHTML = opts;
+  $("#anon-col").innerHTML = opts;
 }
 
 // ---------------------------------------------------------------- 操作
@@ -327,20 +374,158 @@ export function initGrid() {
     } catch (e) { toast(e.message, true); }
   };
 
+  $("#val-allow-fetch").onclick = async () => {
+    const fid = $("#val-allow-src-file").value;
+    const col = $("#val-allow-src-col").value;
+    if (!fid || !col) return toast("生成元のファイルと列を選択してください", true);
+    try {
+      const r = await postJson(`/api/files/${fid}/column-values`, { column: col });
+      $("#val-allow-values").value = r.values.join(",");
+      toast(`${r.values.length}個の許可値を取得しました` + (r.truncated ? "(上限で打ち切り)" : ""));
+    } catch (e) { toast(e.message, true); }
+  };
+
+  $("#val-allow-src-file").onchange = async () => {
+    const fid = $("#val-allow-src-file").value;
+    if (!fid) return;
+    try {
+      const r = await apiJson(`/api/files/${fid}?limit=1`);
+      $("#val-allow-src-col").innerHTML = `<option value="">(列)</option>` +
+        r.columns.map(c => `<option>${escapeHtml(c)}</option>`).join("");
+    } catch (e) { toast(e.message, true); }
+  };
+
   $("#val-do").onclick = async () => {
     if (!await ensureSaved()) return;
     const formats = {};
     if ($("#val-format-col").value) formats[$("#val-format-col").value] = $("#val-format-kind").value;
+    const allowed_values = {};
+    if ($("#val-allow-col").value && $("#val-allow-values").value.trim()) {
+      allowed_values[$("#val-allow-col").value] =
+        $("#val-allow-values").value.split(",").map(v => v.trim()).filter(Boolean);
+    }
     try {
       const r = await postJson(`/api/files/${grid.fileId}/validate`, {
         key_columns: [...$("#val-keys").selectedOptions].map(o => o.value),
         required_columns: [...$("#val-required").selectedOptions].map(o => o.value),
         formats,
+        allowed_values,
       });
       $("#val-result").innerHTML = r.count === 0
         ? `<p>✅ 問題は見つかりませんでした。</p>`
         : `<p class="issue">⚠ ${r.count}件の問題:</p>` + r.issues.slice(0, 200).map(i =>
             `<div class="issue">${i.row}行目 [${escapeHtml(i.column)}] ${escapeHtml(i.message)}</div>`).join("");
+    } catch (e) { toast(e.message, true); }
+  };
+
+  // ---- 表示フィルタ
+  let filterTimer = null;
+  $("#grid-filter").oninput = () => {
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(() => {
+      grid.viewFilter = $("#grid-filter").value;
+      grid.page = 0;
+      renderGrid();
+    }, 250);
+  };
+
+  // ---- 表記ゆれ統一
+  let clusterState = [];
+  $("#cluster-detect").onclick = async () => {
+    if (!await ensureSaved()) return;
+    const col = $("#cluster-col").value;
+    if (!col) return toast("対象列を選択してください", true);
+    try {
+      const r = await postJson(`/api/files/${grid.fileId}/clusters`, { column: col });
+      clusterState = r.clusters;
+      if (!r.count) {
+        $("#cluster-list").innerHTML = "";
+        $("#cluster-apply").hidden = true;
+        $("#cluster-status").textContent = "表記ゆれは見つかりませんでした。";
+        return;
+      }
+      $("#cluster-status").textContent =
+        `${r.count}グループの表記ゆれ候補。統一先を選んで「統一」を押してください。`;
+      $("#cluster-list").innerHTML = r.clusters.map((c, k) => `
+        <div class="toolbar wrap">
+          <label><input type="checkbox" class="cl-use" data-k="${k}" checked> 適用</label>
+          <span>${c.values.map(v =>
+            `<span class="badge warn">${escapeHtml(v.value)} (${v.count})</span>`).join(" ")}</span>
+          <span>→ 統一先:</span>
+          <select class="cl-canon" data-k="${k}">${c.values.map(v =>
+            `<option ${v.value === c.suggested ? "selected" : ""}>${escapeHtml(v.value)}</option>`).join("")}</select>
+        </div>`).join("");
+      $("#cluster-apply").hidden = false;
+    } catch (e) { toast(e.message, true); }
+  };
+
+  $("#cluster-apply").onclick = async () => {
+    const col = $("#cluster-col").value;
+    const mapping = {};
+    $$(".cl-use:checked").forEach(cb => {
+      const k = +cb.dataset.k;
+      const canon = document.querySelector(`.cl-canon[data-k="${k}"]`).value;
+      for (const v of clusterState[k].values) {
+        if (v.value !== canon) mapping[v.value] = canon;
+      }
+    });
+    if (!Object.keys(mapping).length) return toast("適用対象がありません", true);
+    try {
+      const r = await postJson(`/api/files/${grid.fileId}/apply-map`, { column: col, mapping });
+      toast(`${r.changed}セルを統一しました`);
+      $("#cluster-list").innerHTML = "";
+      $("#cluster-apply").hidden = true;
+      $("#cluster-status").textContent = "";
+      await loadGridFile(grid.fileId);
+    } catch (e) { toast(e.message, true); }
+  };
+
+  // ---- 列分割
+  $("#split-do").onclick = async () => {
+    if (!await ensureSaved()) return;
+    const col = $("#split-col").value;
+    const delim = $("#split-delim").value;
+    if (!col || !delim) return toast("列と区切り文字を指定してください", true);
+    try {
+      const r = await postJson(`/api/files/${grid.fileId}/split-column`,
+                               { column: col, delimiter: delim });
+      toast(`「${col}」を${r.parts}列に分割しました`);
+      await loadGridFile(grid.fileId);
+    } catch (e) { toast(e.message, true); }
+  };
+
+  // ---- 匿名化
+  const anonSpec = {};
+  apiJson("/api/anonymize-modes").then(({ modes }) => {
+    $("#anon-mode").innerHTML = modes.map(m =>
+      `<option value="${m.id}">${escapeHtml(m.label)}</option>`).join("");
+  }).catch(() => {});
+
+  function renderAnonSpec() {
+    const entries = Object.entries(anonSpec);
+    $("#anon-spec").textContent = entries.length
+      ? "対象: " + entries.map(([c, m]) => `${c}=${m}`).join("、")
+      : "(対象未指定)";
+  }
+  renderAnonSpec();
+
+  $("#anon-add").onclick = () => {
+    const col = $("#anon-col").value;
+    if (!col) return toast("列を選択してください", true);
+    anonSpec[col] = $("#anon-mode").value;
+    renderAnonSpec();
+  };
+
+  $("#anon-do").onclick = async () => {
+    if (!Object.keys(anonSpec).length) return toast("「＋対象に追加」で匿名化する列を指定してください", true);
+    if (!await ensureSaved()) return;
+    try {
+      const info = await postJson(`/api/files/${grid.fileId}/anonymize`, { spec: anonSpec });
+      toast(`匿名化ファイルを作成しました(${info.changed}セル変更)。ファイル一覧から開けます。`);
+      Object.keys(anonSpec).forEach(k => delete anonSpec[k]);
+      renderAnonSpec();
+      const { refreshFileList } = await import("/static/app.js");
+      refreshFileList();
     } catch (e) { toast(e.message, true); }
   };
 

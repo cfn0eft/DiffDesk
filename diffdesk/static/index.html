@@ -53,6 +53,16 @@
     </div>
   </div>
 
+  <details class="card sub">
+    <summary>Data Loaderエラーファイル分析(error.csvを読み込んで失敗理由を集計・再投入CSVを生成)</summary>
+    <div class="toolbar wrap">
+      <label>対象ファイル: <select id="err-file-select"><option value="">(選択)</option></select></label>
+      <button id="btn-analyze-errors" class="primary">分析</button>
+      <button id="btn-export-retry">再投入用CSVを出力(ERROR列除去)</button>
+    </div>
+    <div id="err-analysis"></div>
+  </details>
+
   <div class="card">
     <h2>読み込み済みファイル・ユーティリティ</h2>
     <div id="file-list"></div>
@@ -219,7 +229,7 @@
       </div>
     </details>
     <details class="card sub">
-      <summary>検証(重複・必須・形式)</summary>
+      <summary>検証(重複・必須・形式・許可値)</summary>
       <div class="toolbar wrap">
         <label>キー列(重複チェック): <select id="val-keys" multiple size="3"></select></label>
         <label>必須列: <select id="val-required" multiple size="3"></select></label>
@@ -228,15 +238,53 @@
             <option value="email">メール</option><option value="phone">電話</option>
             <option value="number">数値</option><option value="date_iso">日付(yyyy-MM-dd)</option>
           </select></label>
+      </div>
+      <div class="toolbar wrap">
+        <label>許可値チェック(ピックリスト): <select id="val-allow-col"><option value="">(列)</option></select></label>
+        <input id="val-allow-values" placeholder="許可値をカンマ区切りで(例: 営業部,開発部)" size="36">
+        <label class="hint">別ファイルの実値から生成:
+          <select id="val-allow-src-file"><option value="">(ファイル)</option></select>
+          <select id="val-allow-src-col"><option value="">(列)</option></select>
+        </label>
+        <button id="val-allow-fetch" class="mini">取得</button>
         <button id="val-do" class="primary">検証実行</button>
       </div>
       <div id="val-result"></div>
+    </details>
+    <details class="card sub">
+      <summary>表記ゆれ統一(同一実体の別表記を検出して一括置換)</summary>
+      <div class="toolbar wrap">
+        <label>対象列: <select id="cluster-col"></select></label>
+        <button id="cluster-detect" class="primary">検出</button>
+        <button id="cluster-apply" hidden>選択した表記に統一</button>
+        <span id="cluster-status" class="hint"></span>
+      </div>
+      <div id="cluster-list"></div>
+    </details>
+    <details class="card sub">
+      <summary>列分割・匿名化</summary>
+      <div class="toolbar wrap">
+        <label>列分割: <select id="split-col"></select></label>
+        <input id="split-delim" placeholder="区切り(例: 空白、-)" size="10">
+        <button id="split-do">分割</button>
+        <span class="hint">「列名_1」「列名_2」…に置き換わります</span>
+      </div>
+      <div class="toolbar wrap">
+        <label>匿名化: <select id="anon-col"></select></label>
+        <select id="anon-mode"></select>
+        <button id="anon-add" class="mini">＋対象に追加</button>
+        <span id="anon-spec" class="hint"></span>
+        <button id="anon-do" class="primary">匿名化ファイルを作成</button>
+      </div>
     </details>
     <div id="grid-status" class="statusbar"></div>
     <div class="toolbar">
       <span id="grid-page-info"></span>
       <button id="grid-prev">前へ</button>
       <button id="grid-next">次へ</button>
+      <span class="spacer"></span>
+      <label>表示フィルタ: <input id="grid-filter" placeholder="全列を部分一致で絞り込み" size="24"></label>
+      <span class="hint">ヘッダーの ⇅ でソート(データの並びが変わります)</span>
     </div>
     <div class="scroll-x"><div id="grid-container"></div></div>
   </div>

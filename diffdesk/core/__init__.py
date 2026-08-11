@@ -3,10 +3,19 @@
 このパッケージはCLI・スクリプト・他UIからそのまま再利用できる。
 fastapi等のwebライブラリをimportしてはならない。
 """
-from .clean import CLEAN_OPS, clean_columns
+from .anonymize import ANONYMIZE_MODES, anonymize_columns
+from .clean import CLEAN_OPS, COLUMN_OPS, clean_columns
+from .cluster import ValueCluster, apply_value_map, cluster_column, fingerprint
+from .loader_errors import (
+    ERROR_CATEGORIES,
+    analyze_errors,
+    build_retry_table,
+    find_error_column,
+)
 from .diff import apply_filter, diff_tables
 from .edit import (
     dedupe_rows,
+    split_column,
     delete_column,
     delete_rows,
     insert_column,

@@ -76,6 +76,11 @@ def op_date_iso(v: str) -> str:
     return v
 
 
+def op_digits_only(v: str) -> str:
+    """数字以外を除去(電話番号・郵便番号の統一に。全角数字は半角化)。"""
+    return re.sub(r"\D", "", unicodedata.normalize("NFKC", v))
+
+
 CLEAN_OPS: dict[str, tuple[str, Callable[[str], str]]] = {
     "trim": ("前後の空白を除去", op_trim),
     "alnum_han": ("全角英数記号→半角(それ以外は変えない)", op_alnum_han),
@@ -85,24 +90,40 @@ CLEAN_OPS: dict[str, tuple[str, Callable[[str], str]]] = {
     "upper": ("大文字に統一", op_upper),
     "lower": ("小文字に統一", op_lower),
     "date_iso": ("日付を yyyy-MM-dd に統一", op_date_iso),
+    "digits_only": ("数字のみ抽出(電話・郵便番号)", op_digits_only),
 }
+
+# 列全体を見て処理する操作(セル単位では表現できないもの)
+COLUMN_OPS: dict[str, str] = {
+    "fill_down": "空欄を上の値で埋める(Excel結合セル対策)",
+}
+
+
+def _fill_down(rows: list[list[str]], ci: int) -> None:
+    last = ""
+    for row in rows:
+        if row[ci].strip():
+            last = row[ci]
+        elif last:
+            row[ci] = last
 
 
 def clean_columns(table: Table, columns: list[str], ops: list[str]) -> tuple[Table, int]:
     """指定列に操作を順番に適用し、変更セル数を返す。"""
-    funcs = []
     for op in ops:
-        if op not in CLEAN_OPS:
+        if op not in CLEAN_OPS and op not in COLUMN_OPS:
             raise DiffDeskError(f"不明なクレンジング操作です: {op}", op=op)
-        funcs.append(CLEAN_OPS[op][1])
     indices = [table.col_index(c) for c in columns]
     changed = 0
-    for row in table.rows:
-        for ci in indices:
-            v = row[ci]
-            for f in funcs:
-                v = f(v)
-            if v != row[ci]:
-                row[ci] = v
-                changed += 1
+    for ci in indices:
+        before = [row[ci] for row in table.rows]
+        for op in ops:
+            if op in CLEAN_OPS:
+                f = CLEAN_OPS[op][1]
+                for row in table.rows:
+                    row[ci] = f(row[ci])
+            else:  # COLUMN_OPS
+                if op == "fill_down":
+                    _fill_down(table.rows, ci)
+        changed += sum(1 for row, old in zip(table.rows, before) if row[ci] != old)
     return table, changed
