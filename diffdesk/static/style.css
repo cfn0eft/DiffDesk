@@ -268,6 +268,26 @@ details[open].card summary { border-bottom-color: var(--border); margin-bottom: 
 #split-g .g-only_a { color: #a33c34; }
 #split-g .g-only_b { color: #2c6e2c; }
 #split-g .g-known, #split-g .g-same { color: #b5b0a4; }
+/* 手動紐づけ(ドラッグ) */
+#split-view { position: relative; }
+#link-overlay {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 5;
+}
+#link-overlay[hidden] { display: none; }
+#link-overlay line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
+#split-g td.linkable { cursor: grab; touch-action: none; user-select: none; }
+.linkdot { font-size: 13px; }
+#split-view tr.link-target td { outline: 2px dashed var(--accent); outline-offset: -2px; }
+#split-g .g-manual { color: var(--accent); }
+/* 全画面表示 */
+body.diff-fs { overflow: hidden; }
+body.diff-fs #diff-table-card {
+  position: fixed; inset: 0; z-index: 60; margin: 0; overflow: auto;
+  border: none;
+}
+body.diff-fs .split-pane, body.diff-fs .split-gutter { max-height: calc(100vh - 150px); }
+body.diff-fs #merged-wrap { max-height: calc(100vh - 130px); overflow: auto; }
 #split-legend .lg { padding: 1px 6px; border: 1px solid var(--border); margin: 0 2px; }
 #split-legend .lg-del { background: #f2dcdc; }
 #split-legend .lg-add { background: #dceadc; }

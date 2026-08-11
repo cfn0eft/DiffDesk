@@ -224,6 +224,8 @@ class RowDiff:
     cell_diffs: list[CellDiff] = field(default_factory=list)
     known: bool = False  # 既知差分として容認済み(欠落レコード or 全セル差分が既知)
     known_diffs: list[CellDiff] = field(default_factory=list)  # 既知扱いのセル差分
+    manual: bool = False  # ユーザーが手動で紐づけたペア
+    key_b: tuple[str, ...] | None = None  # 手動紐づけ時の相手側(B)のキー
 
     def to_dict(self) -> dict:
         return {
@@ -234,6 +236,8 @@ class RowDiff:
             "cell_diffs": [c.to_dict() for c in self.cell_diffs],
             "known": self.known,
             "known_diffs": [c.to_dict() for c in self.known_diffs],
+            "manual": self.manual,
+            "key_b": list(self.key_b) if self.key_b else None,
         }
 
 

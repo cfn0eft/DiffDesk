@@ -278,13 +278,17 @@ let currentRows = [];  // 表示中ページの行(詳細パネル用)
 let viewMode = localStorage.getItem("diffdesk-viewmode") || "merged";
 
 function matchLabelFor(r, nValues) {
+  const man = r.manual ? ` <span class="hint">(手動紐づけ)</span>` : "";
   if (r.known && (r.status === "only_a" || r.status === "only_b")) return "既知(容認)";
   if (r.status === "same") {
-    return r.known_diffs?.length
+    return (r.known_diffs?.length
       ? `<b>${nValues}/${nValues}</b> <span class="hint">(既知${r.known_diffs.length})</span>`
-      : `<b>${nValues}/${nValues}</b> 一致`;
+      : `<b>${nValues}/${nValues}</b> 一致`) + man;
   }
-  if (r.status === "changed") return `<b>${nValues - r.cell_diffs.length}/${nValues}</b> 一致`;
+  if (r.status === "changed") {
+    const nAll = r.manual ? state.diff.columns_a.length : nValues;
+    return `<b>${nAll - r.cell_diffs.length}/${nAll}</b> 一致${man}`;
+  }
   if (r.status === "only_a") return "未登録";
   return "基準に無し";
 }
@@ -394,12 +398,18 @@ function renderSplitTable(rows) {
       sideRow(r.row_b, r.row_b ? ++numB : 0, "(比較先に未登録)", "sp-cell-add") + `</tr>`);
 
     const [mark, label] = r.known ? ["既", "既知(容認)"]
+      : r.manual ? ["⇔", "手動で紐づけ済み(詳細から解除できます)"]
       : r.status === "changed" ? ["≠", `値の相違: ${matchLabelFor(r, nValues).replace(/<[^>]*>/g, "")}`]
       : r.status === "only_a" ? ["−", "比較先に未登録"]
       : r.status === "only_b" ? ["＋", "基準に無し"]
       : ["＝", "一致"];
+    const linkable = !r.known && (r.status === "only_a" || r.status === "only_b");
+    const cellContent = linkable
+      ? `<span class="linkdot" title="ドラッグして相手側の行に落とすと手動で紐づけ">●</span>`
+      : mark;
     bodyG.push(`<tr class="${rowCls}" data-ri="${ri}">` +
-      `<td class="g-${r.known ? "known" : r.status}" title="${escapeHtml(label)}">${mark}</td></tr>`);
+      `<td class="g-${r.known ? "known" : r.manual ? "manual" : r.status}` +
+      `${linkable ? " linkable" : ""}" title="${escapeHtml(label)}">${cellContent}</td></tr>`);
   });
 
   $("#split-a").innerHTML =
@@ -441,6 +451,116 @@ function setSplitHover(ri, on) {
   pb.addEventListener("scroll", sync(pb));
 }
 
+// ---------------------------------------------------------------- 手動紐づけ(ドラッグ)
+// 中央ガターの ● を掴んで反対側の未対応行に落とすと、その2行をペアとして登録する。
+let linkDrag = null;  // {ri, status, x0, y0, moved, targetTr}
+
+function overlayPos(e) {
+  const rect = $("#split-view").getBoundingClientRect();
+  return [e.clientX - rect.left, e.clientY - rect.top];
+}
+
+function dropTargetAt(e, drag) {
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const tr = el && el.closest("#split-view tbody tr[data-ri]");
+  if (!tr) return null;
+  const r = currentRows[+tr.dataset.ri];
+  const want = drag.status === "only_a" ? "only_b" : "only_a";
+  return (r && r.status === want && !r.known) ? tr : null;
+}
+
+function clearLinkTargets() {
+  $$("#split-view tr.link-target").forEach(t => t.classList.remove("link-target"));
+}
+
+document.addEventListener("pointerdown", e => {
+  const dot = e.target.closest("#split-g td.linkable");
+  if (!dot) return;
+  const tr = dot.closest("tr[data-ri]");
+  const r = currentRows[+tr.dataset.ri];
+  if (!r) return;
+  e.preventDefault();
+  const [x, y] = overlayPos(e);
+  linkDrag = { ri: +tr.dataset.ri, status: r.status, x0: x, y0: y, moved: false, targetTr: null };
+  const ov = $("#link-overlay");
+  const line = ov.querySelector("line");
+  line.setAttribute("x1", x); line.setAttribute("y1", y);
+  line.setAttribute("x2", x); line.setAttribute("y2", y);
+});
+
+document.addEventListener("pointermove", e => {
+  if (!linkDrag) return;
+  const [x, y] = overlayPos(e);
+  if (!linkDrag.moved && Math.hypot(x - linkDrag.x0, y - linkDrag.y0) < 5) return;
+  linkDrag.moved = true;
+  $("#link-overlay").removeAttribute("hidden");  // SVGはhiddenプロパティ非対応
+  const line = $("#link-overlay").querySelector("line");
+  line.setAttribute("x2", x); line.setAttribute("y2", y);
+  const target = dropTargetAt(e, linkDrag);
+  if (target !== linkDrag.targetTr) {
+    clearLinkTargets();
+    linkDrag.targetTr = target;
+    if (target) SPLIT_TABLES.forEach(sel => {
+      const t = document.querySelector(`${sel} tbody tr[data-ri="${target.dataset.ri}"]`);
+      if (t) t.classList.add("link-target");
+    });
+  }
+});
+
+document.addEventListener("pointerup", e => {
+  if (!linkDrag) return;
+  const drag = linkDrag;
+  linkDrag = null;
+  $("#link-overlay").setAttribute("hidden", "");
+  clearLinkTargets();
+  if (!drag.moved) return;  // ●はドラッグ専用(行の他の部分クリックで詳細表示)
+  const target = dropTargetAt(e, drag);
+  if (!target) return;
+  const rSrc = currentRows[drag.ri];
+  const rDst = currentRows[+target.dataset.ri];
+  if (!rSrc || !rDst) return;
+  const [keyA, keyB] = drag.status === "only_a"
+    ? [rSrc.key, rDst.key] : [rDst.key, rSrc.key];
+  registerManualPair(keyA, keyB);
+});
+
+async function registerManualPair(keyA, keyB) {
+  const d = state.diff;
+  if (!d) return;
+  try {
+    await postJson(`/api/diff/${d.diff_id}/manual-pairs`,
+      { key_a: [...keyA], key_b: [...keyB] });
+    toast(`「${keyA.join("/")}」と「${keyB.join("/")}」を手動で紐づけました(⇔印)。詳細画面から解除できます。`);
+    refreshAfterKnownChange();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function unlinkManualPair(r) {
+  const d = state.diff;
+  if (!d) return;
+  try {
+    const { pairs } = await (await api(`/api/diff/${d.diff_id}/manual-pairs`)).json();
+    const idx = pairs.findIndex(p => JSON.stringify(p.key_a) === JSON.stringify([...r.key]));
+    if (idx < 0) return toast("この紐づけが見つかりません。", true);
+    await api(`/api/diff/${d.diff_id}/manual-pairs/${idx}`, { method: "DELETE" });
+    toast("手動の紐づけを解除しました。");
+    $("#dialog").close();
+    refreshAfterKnownChange();
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---------------------------------------------------------------- 全画面表示
+$("#btn-fullscreen").onclick = () => setFullscreen(!document.body.classList.contains("diff-fs"));
+
+function setFullscreen(on) {
+  document.body.classList.toggle("diff-fs", on);
+  $("#btn-fullscreen").textContent = on ? "✕ 全画面解除" : "⛶ 全画面";
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && document.body.classList.contains("diff-fs")) setFullscreen(false);
+});
+
 $("#view-merged").onclick = () => setViewMode("merged");
 $("#view-split").onclick = () => setViewMode("split");
 
@@ -466,10 +586,10 @@ function showRecordDetail(r) {
     const va = r.row_a ? r.row_a[i] : "";
     const vb = r.row_b ? r.row_b[i] : "";
     let mark, cls;
-    if (d.key_flags[i]) { mark = "🔑"; cls = ""; }
+    if (changed.has(colA)) { mark = "✖"; cls = "detail-ng"; }
+    else if (d.key_flags[i]) { mark = "🔑"; cls = ""; }
     else if (r.status === "only_a") { mark = "－"; cls = "detail-miss"; }
     else if (r.status === "only_b") { mark = "－"; cls = "detail-miss"; }
-    else if (changed.has(colA)) { mark = "✖"; cls = "detail-ng"; }
     else if (r.known_diffs?.some(kd => kd.col_a === colA)) { mark = "済"; cls = "detail-ok"; }
     else { mark = "✔"; cls = "detail-ok"; }
     const label = colA === colB ? colA : `${colA} / ${colB}`;
@@ -488,14 +608,49 @@ function showRecordDetail(r) {
   const missingKnownBtn = (r.status === "only_a" || r.status === "only_b") && !r.known
     ? `<button id="known-row-btn" title="このレコードの欠落を確認済みとして容認する">この欠落を既知にする</button>`
     : "";
+  const linkUi = (r.status === "only_a" || r.status === "only_b") && !r.known
+    ? `<span id="link-ui"><select id="link-select"><option value="">(紐づける相手を選択)</option></select>
+       <button id="link-do" title="キーが違うレコード同士を手動でペアにする">この相手と紐づけ</button></span>`
+    : "";
+  const unlinkBtn = r.manual
+    ? `<button id="link-undo" title="手動の紐づけを取り消して元の未対応状態に戻す">紐づけを解除</button>`
+    : "";
+  const keyLine = r.manual && r.key_b
+    ? `キー: ${escapeHtml(r.key.join(" / "))} ⇔ ${escapeHtml(r.key_b.join(" / "))}(手動紐づけ)`
+    : `キー: ${escapeHtml(r.key.join(" / "))}`;
   const dlg = $("#dialog");
-  dlg.innerHTML = `<h2>レコード照合詳細 — キー: ${escapeHtml(r.key.join(" / "))}</h2>
-    <p style="margin:8px 12px"><b>${STATUS_JA[r.status]}${r.known ? "(既知)" : ""}</b>: ${summary}</p>
+  dlg.innerHTML = `<h2>レコード照合詳細 — ${keyLine}</h2>
+    <p style="margin:8px 12px"><b>${STATUS_JA[r.status]}${r.known ? "(既知)" : ""}${r.manual ? "(手動紐づけ)" : ""}</b>: ${summary}</p>
     <div style="margin:0 12px; max-height:60vh; overflow:auto">
     <table><thead><tr><th></th><th>項目</th><th>基準 (A)</th><th>比較 (B)</th><th></th></tr></thead>
     <tbody>${rowsHtml}</tbody></table></div>
-    <div class="toolbar">${missingKnownBtn}<button data-cancel class="primary">閉じる</button></div>`;
+    <div class="toolbar">${missingKnownBtn}${linkUi}${unlinkBtn}<button data-cancel class="primary">閉じる</button></div>`;
   dlg.querySelector("[data-cancel]").onclick = () => dlg.close();
+  const linkDo = dlg.querySelector("#link-do");
+  if (linkDo) {
+    const side = r.status === "only_a" ? "b" : "a";  // 相手側の候補を出す
+    (async () => {
+      try {
+        const { rows: cands } = await (await api(
+          `/api/diff/${d.diff_id}/unmatched?side=${side}`)).json();
+        const sel = dlg.querySelector("#link-select");
+        sel.innerHTML = `<option value="">(紐づける相手を選択 — ${cands.length}件)</option>` +
+          cands.map(c =>
+            `<option value='${escapeHtml(JSON.stringify(c.key))}'>${escapeHtml(c.label)}</option>`
+          ).join("");
+      } catch { /* 候補が取れなくてもダイアログ自体は使える */ }
+    })();
+    linkDo.onclick = () => {
+      const v = dlg.querySelector("#link-select").value;
+      if (!v) return toast("紐づける相手を選択してください。", true);
+      const other = JSON.parse(v);
+      const [keyA, keyB] = r.status === "only_a" ? [[...r.key], other] : [other, [...r.key]];
+      dlg.close();
+      registerManualPair(keyA, keyB);
+    };
+  }
+  const unlink = dlg.querySelector("#link-undo");
+  if (unlink) unlink.onclick = () => unlinkManualPair(r);
   dlg.querySelectorAll(".known-cell-btn").forEach(b => b.onclick = () => {
     const cd = r.cell_diffs.find(x => x.col_a === b.dataset.col);
     if (cd) registerKnown({ type: "cell", key: [...r.key], col_a: cd.col_a,

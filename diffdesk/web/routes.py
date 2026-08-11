@@ -15,6 +15,10 @@ from ..core import (
     analyze_errors,
     append_history,
     apply_known_diffs,
+    apply_manual_pairs,
+    DiffDeskError,
+    list_unmatched,
+    validate_manual_pair,
     clear_history,
     clear_known_diffs,
     column_diff_summary,
@@ -386,8 +390,49 @@ def enrich_file(file_id: str, req: sc.EnrichRequest):
 # ---------------------------------------------------------------- mapping/diff
 
 def _diff_with_known(diff_id: str):
-    """保存済み差分に既知差分リストを適用して返す(元は変更しない)。"""
-    return apply_known_diffs(store.get_diff(diff_id), load_known_diffs())
+    """保存済み差分に手動紐づけ→既知差分の順で適用して返す(元は変更しない)。"""
+    diff = apply_manual_pairs(store.get_diff(diff_id), store.get_manual_pairs(diff_id))
+    return apply_known_diffs(diff, load_known_diffs())
+
+
+# ---------------------------------------------------------------- 手動紐づけ
+
+@router.get("/diff/{diff_id}/manual-pairs")
+def get_manual_pairs(diff_id: str):
+    store.get_diff(diff_id)
+    return {"pairs": store.get_manual_pairs(diff_id)}
+
+
+@router.post("/diff/{diff_id}/manual-pairs")
+def add_manual_pair(diff_id: str, req: sc.ManualPairRequest):
+    pair = validate_manual_pair({"key_a": req.key_a, "key_b": req.key_b})
+    applied = _diff_with_known(diff_id)
+    statuses = {r.key: r.status for r in applied.rows}
+    if statuses.get(tuple(pair["key_a"])) != "only_a":
+        raise DiffDeskError(
+            f"基準(A)側のキー {'/'.join(pair['key_a'])} は未対応(Aのみ)の行ではありません。")
+    if statuses.get(tuple(pair["key_b"])) != "only_b":
+        raise DiffDeskError(
+            f"比較(B)側のキー {'/'.join(pair['key_b'])} は未対応(Bのみ)の行ではありません。")
+    pairs = store.add_manual_pair(diff_id, pair)
+    return {"pairs": pairs, "count": len(pairs)}
+
+
+@router.delete("/diff/{diff_id}/manual-pairs/{index}")
+def delete_manual_pair(diff_id: str, index: int):
+    pairs = store.remove_manual_pair(diff_id, index)
+    return {"pairs": pairs, "count": len(pairs)}
+
+
+@router.delete("/diff/{diff_id}/manual-pairs")
+def clear_manual_pairs(diff_id: str):
+    store.clear_manual_pairs(diff_id)
+    return {"pairs": [], "count": 0}
+
+
+@router.get("/diff/{diff_id}/unmatched")
+def unmatched_rows(diff_id: str, side: str):
+    return {"rows": list_unmatched(_diff_with_known(diff_id), side)}
 
 
 @router.post("/automap")
