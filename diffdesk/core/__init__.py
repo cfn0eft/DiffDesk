@@ -4,6 +4,19 @@
 fastapi等のwebライブラリをimportしてはならない。
 """
 from .address import split_address, split_address_column
+from .known import apply_known_diffs, column_diff_summary
+from .workspace import (
+    add_known_diff,
+    add_user_pairs,
+    append_history,
+    clear_history,
+    clear_known_diffs,
+    load_history,
+    load_known_diffs,
+    load_user_dict,
+    remove_known_diff,
+    remove_user_pair,
+)
 from .anonymize import ANONYMIZE_MODES, anonymize_columns
 from .fuzzy import FuzzyCandidate, build_linked_table, fuzzy_match
 from .profile_stats import (

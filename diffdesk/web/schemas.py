@@ -89,6 +89,14 @@ class RecipeApplyRequest(BaseModel):
     name: str
 
 
+class KnownDiffRequest(BaseModel):
+    entry: dict  # {type: "cell"|"row", key: [...], ...}
+
+
+class UserDictRequest(BaseModel):
+    pairs: list[dict]  # [{col_a, col_b}, ...]
+
+
 class ClusterRequest(BaseModel):
     column: str
 

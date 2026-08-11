@@ -44,7 +44,7 @@ def build_upsert_table(diff: DiffResult, *, external_id_col_a: str,
         raise DiffDeskError("出力ヘッダー(Salesforce項目名)が重複しています。",
                           headers=headers)
     rows = [list(rd.row_a) for rd in diff.rows
-            if rd.status in include and rd.row_a is not None]
+            if rd.status in include and rd.row_a is not None and not rd.known]
     return Table(columns=headers, rows=rows, name="upsert")
 
 
@@ -63,7 +63,7 @@ def build_delete_table(diff: DiffResult, *, id_col_b: str = "Id") -> Table:
         )
     rows = []
     for rd in diff.rows:
-        if rd.status == "only_b" and rd.row_b is not None:
+        if rd.status == "only_b" and rd.row_b is not None and not rd.known:
             v = rd.row_b[idx]
             if v.strip():
                 rows.append([v])

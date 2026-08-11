@@ -435,7 +435,11 @@ async function doAutomap() {
     best.is_key = true;
   }
   renderMappingTable();
-  const detail = r.by_value ? `(名前一致${r.by_name}組・中身から推定${r.by_value}組)` : "";
+  const parts = [];
+  if (r.by_dict) parts.push(`辞書${r.by_dict}組`);
+  if (r.by_name) parts.push(`名前一致${r.by_name}組`);
+  if (r.by_value) parts.push(`中身から推定${r.by_value}組`);
+  const detail = parts.length > 1 || r.by_dict ? `(${parts.join("・")})` : "";
   const keyMsg = candidates.length
     ? `キー候補として「${state.mapping.find(p => p.is_key)?.col_a}」を自動設定しました。`
     : "キー列にチェックを入れてください。";
@@ -577,6 +581,36 @@ $("#btn-mapping-export").onclick = () => {
   a.click();
   URL.revokeObjectURL(a.href);
 };
+
+// ---------------------------------------------------------------- ユーザー辞書
+$("#btn-dict-learn").onclick = async () => {
+  if (!state.mapping.length) return toast("学習させる対応がありません。先にマッピングを設定してください。", true);
+  try {
+    const pairs = state.mapping.map(p => ({ col_a: p.col_a, col_b: p.col_b }));
+    const r = await postJson("/api/user-dict", { pairs });
+    toast(`${pairs.length}組の対応をユーザー辞書に学習しました(辞書合計${r.count}組)。次回の自動対応付けで最優先されます。`);
+    loadDictList();
+  } catch (e) { toast(e.message, true); }
+};
+
+async function loadDictList() {
+  try {
+    const { entries } = await apiJson("/api/user-dict");
+    $("#dict-list").innerHTML = entries.length
+      ? `<table><thead><tr><th>自分の列名</th><th>相手の列名</th><th></th></tr></thead><tbody>` +
+        entries.map((e, i) =>
+          `<tr><td>${escapeHtml(e.col_a)}</td><td>${escapeHtml(e.col_b)}</td>` +
+          `<td><button class="mini danger dict-del" data-i="${i}">削除</button></td></tr>`).join("") +
+        `</tbody></table>`
+      : `<p class="hint">まだ学習した対応はありません。「対応を辞書に学習」で登録できます。</p>`;
+    $$(".dict-del").forEach(b => b.onclick = async () => {
+      await api(`/api/user-dict/${b.dataset.i}`, { method: "DELETE" });
+      loadDictList();
+    });
+  } catch { /* 無視 */ }
+}
+$("#dict-refresh").onclick = loadDictList;
+loadDictList();
 
 // ---------------------------------------------------------------- プロファイル
 async function refreshProfiles() {
