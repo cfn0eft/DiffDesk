@@ -160,8 +160,11 @@ async function registerKnown(entry) {
 let jumpIndex = -1;
 
 function jumpTo(delta) {
+  const lists = viewMode === "split"
+    ? SPLIT_TABLES.map(sel => $$(sel + " tbody tr"))
+    : [$$("#diff-table tbody tr")];
   const problems = [];
-  $$("#diff-table tbody tr").forEach((tr, i) => {
+  lists[0].forEach((tr, i) => {
     const r = currentRows[+tr.dataset.ri];
     if (r && r.status !== "same" && !r.known) problems.push(i);
   });
@@ -171,11 +174,11 @@ function jumpTo(delta) {
   if (pos === -1) next = delta > 0 ? problems[0] : problems[problems.length - 1];
   else next = problems[(pos + delta + problems.length) % problems.length];
   jumpIndex = next;
-  const trs = $$("#diff-table tbody tr");
-  trs.forEach(tr => tr.classList.remove("jump-current"));
-  const tr = trs[next];
-  tr.classList.add("jump-current");
-  tr.scrollIntoView({ block: "center", behavior: "smooth" });
+  lists.forEach(trs => {
+    trs.forEach(tr => tr.classList.remove("jump-current"));
+    if (trs[next]) trs[next].classList.add("jump-current");
+  });
+  lists[0][next].scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 $("#jump-next").onclick = () => jumpTo(1);
@@ -288,7 +291,12 @@ function matchLabelFor(r, nValues) {
 
 function renderRowsTable(rows) {
   currentRows = rows;
-  if (viewMode === "split") {
+  const split = viewMode === "split";
+  $("#merged-wrap").hidden = split;
+  $("#merged-hint").hidden = split;
+  $("#split-view").hidden = !split;
+  $("#split-legend").hidden = !split;
+  if (split) {
     renderSplitTable(rows);
     return;
   }
@@ -340,46 +348,97 @@ function renderRowsTable(rows) {
   });
 }
 
-// 左右分割表示: 左=基準(A)、右=比較(B)をレコード対で並べる
+// 左右分割表示: コードエディタの差分表示風。左=基準(A)、右=比較(B)を
+// レコード対で同じ高さに揃え、赤(未登録)/緑(基準に無し)/黄(相違)で色付け。
+const SPLIT_TABLES = ["#split-a", "#split-g", "#split-b"];
+
 function renderSplitTable(rows) {
   const d = state.diff;
   const nCols = d.columns_a.length;
   const nValues = d.key_flags.filter(f => !f).length;
 
-  const groupHead = `<tr class="grouphead"><th colspan="2"></th>` +
-    `<th colspan="${nCols}" class="side-a-h">基準ファイル (A)</th>` +
-    `<th colspan="${nCols}" class="side-b-h b-sep">比較ファイル (B)</th></tr>`;
-  const colHead = `<tr><th>状態</th><th>照合</th>` +
-    d.columns_a.map((c, i) =>
-      `<th>${d.key_flags[i] ? "🔑 " : ""}${escapeHtml(c)}</th>`).join("") +
-    d.columns_b.map((c, i) =>
-      `<th${i === 0 ? ' class="b-sep"' : ""}>${d.key_flags[i] ? "🔑 " : ""}${escapeHtml(c)}</th>`).join("") +
-    `</tr>`;
+  $("#split-label-a").textContent =
+    `基準 (A)${state.fileA ? " — " + state.fileA.filename : ""}`;
+  $("#split-label-b").textContent =
+    `比較 (B)${state.fileB ? " — " + state.fileB.filename : ""}`;
 
-  const body = rows.map((r, ri) => {
-    const changed = new Set(r.cell_diffs.map(cd => cd.col_a));
-    const sideCells = (rowVals, absentLabel) => d.columns_a.map((colA, i) => {
-      const sep = "";
-      if (!rowVals) {
-        return `<td class="absent">${i === Math.floor(nCols / 2) ? absentLabel : ""}</td>`;
+  const colgroup = `<colgroup><col style="width:44px">` +
+    d.columns_a.map(() => `<col style="width:160px">`).join("") + `</colgroup>`;
+  const headRow = cols => `<tr><th class="rownum">#</th>` +
+    cols.map((c, i) =>
+      `<th title="${escapeHtml(c)}">${d.key_flags[i] ? "🔑 " : ""}${escapeHtml(c)}</th>`
+    ).join("") + `</tr>`;
+
+  let numA = 0, numB = 0;
+  const bodyA = [], bodyB = [], bodyG = [];
+  rows.forEach((r, ri) => {
+    const changedIdx = new Set(r.cell_diffs.map(cd => d.columns_a.indexOf(cd.col_a)));
+    const knownIdx = new Set((r.known_diffs || []).map(cd => d.columns_a.indexOf(cd.col_a)));
+    const rowCls = r.known ? "sp-known"
+      : r.status === "changed" ? "sp-mod"
+      : r.status === "only_a" ? "sp-del"
+      : r.status === "only_b" ? "sp-add" : "";
+
+    const sideRow = (vals, num, absentLabel, cellCls) => {
+      if (!vals) {
+        return `<td class="sp-absent" colspan="${nCols + 1}">${absentLabel}</td>`;
       }
-      const cls = changed.has(colA) ? "cell-changed" : "";
-      return `<td class="${cls}">${escapeHtml(rowVals[i])}</td>`;
-    });
-    const cellsA = sideCells(r.row_a, "(基準に無し)");   // A側が空 = 基準に存在しない
-    const cellsB = sideCells(r.row_b, "(未登録)");       // B側が空 = 比較先に未登録
-    // B側の先頭セルに区切り線クラスを付与
-    cellsB[0] = cellsB[0].replace("<td class=\"", "<td class=\"b-sep ")
-                         .replace("<td class=\"b-sep absent", "<td class=\"b-sep absent");
-    return `<tr class="row-${r.status}" data-ri="${ri}">` +
-      `<td>${STATUS_JA[r.status]}</td><td class="matchcell">${matchLabelFor(r, nValues)}</td>` +
-      cellsA.join("") + cellsB.join("") + `</tr>`;
-  }).join("");
+      return `<td class="rownum">${num}</td>` + vals.map((v, i) => {
+        const cls = changedIdx.has(i) ? cellCls : (knownIdx.has(i) ? "sp-cell-known" : "");
+        return `<td class="${cls}" title="${escapeHtml(v)}">${escapeHtml(v)}</td>`;
+      }).join("");
+    };
+    bodyA.push(`<tr class="${rowCls}" data-ri="${ri}">` +
+      sideRow(r.row_a, r.row_a ? ++numA : 0, "(基準に無し)", "sp-cell-del") + `</tr>`);
+    bodyB.push(`<tr class="${rowCls}" data-ri="${ri}">` +
+      sideRow(r.row_b, r.row_b ? ++numB : 0, "(比較先に未登録)", "sp-cell-add") + `</tr>`);
 
-  $("#diff-table").innerHTML = `<thead>${groupHead}${colHead}</thead><tbody>${body}</tbody>`;
-  $$("#diff-table tbody tr").forEach(tr => {
-    tr.onclick = () => showRecordDetail(currentRows[+tr.dataset.ri]);
+    const [mark, label] = r.known ? ["既", "既知(容認)"]
+      : r.status === "changed" ? ["≠", `値の相違: ${matchLabelFor(r, nValues).replace(/<[^>]*>/g, "")}`]
+      : r.status === "only_a" ? ["−", "比較先に未登録"]
+      : r.status === "only_b" ? ["＋", "基準に無し"]
+      : ["＝", "一致"];
+    bodyG.push(`<tr class="${rowCls}" data-ri="${ri}">` +
+      `<td class="g-${r.known ? "known" : r.status}" title="${escapeHtml(label)}">${mark}</td></tr>`);
   });
+
+  $("#split-a").innerHTML =
+    colgroup + `<thead>${headRow(d.columns_a)}</thead><tbody>${bodyA.join("")}</tbody>`;
+  $("#split-b").innerHTML =
+    colgroup + `<thead>${headRow(d.columns_b)}</thead><tbody>${bodyB.join("")}</tbody>`;
+  $("#split-g").innerHTML =
+    `<thead><tr><th>&nbsp;</th></tr></thead><tbody>${bodyG.join("")}</tbody>`;
+
+  // 行クリック=詳細、ホバー=対応レコードを左右両方で強調
+  SPLIT_TABLES.forEach(sel => $$(sel + " tbody tr").forEach(tr => {
+    tr.onclick = () => showRecordDetail(currentRows[+tr.dataset.ri]);
+    tr.onmouseenter = () => setSplitHover(+tr.dataset.ri, true);
+    tr.onmouseleave = () => setSplitHover(+tr.dataset.ri, false);
+  }));
+}
+
+function setSplitHover(ri, on) {
+  SPLIT_TABLES.forEach(sel => {
+    const tr = document.querySelector(`${sel} tbody tr[data-ri="${ri}"]`);
+    if (tr) tr.classList.toggle("hoverrow", on);
+  });
+}
+
+// 縦スクロールを3ペインで同期、横スクロールは左右ペインで同期(列が1:1対応のため)
+{
+  const pa = $("#split-pane-a"), pb = $("#split-pane-b"), pg = $("#split-pane-g");
+  let lock = false;
+  const sync = src => () => {
+    if (lock) return;
+    lock = true;
+    const other = src === pa ? pb : pa;
+    other.scrollTop = src.scrollTop;
+    other.scrollLeft = src.scrollLeft;
+    pg.scrollTop = src.scrollTop;
+    requestAnimationFrame(() => { lock = false; });
+  };
+  pa.addEventListener("scroll", sync(pa));
+  pb.addEventListener("scroll", sync(pb));
 }
 
 $("#view-merged").onclick = () => setViewMode("merged");
