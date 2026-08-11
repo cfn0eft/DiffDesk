@@ -23,6 +23,16 @@ export function renderDiff() {
     `<div class="stat ${k}"><div class="num">${s[k]}</div><div class="hint">${label}</div></div>`
   ).join("");
 
+  // フィルタボタンに件数を表示
+  const total = s.only_a + s.only_b + s.changed + s.same;
+  const labels = { "": ["全て", total], only_a: ["Aのみ", s.only_a],
+                   only_b: ["Bのみ", s.only_b], changed: ["変更", s.changed],
+                   same: ["一致", s.same] };
+  $$(".statusfilter").forEach(b => {
+    const [name, count] = labels[b.dataset.status];
+    b.textContent = `${name} (${count})`;
+  });
+
   const warnings = [];
   if (s.duplicates_a) warnings.push(`ファイルAにキー重複が${s.duplicates_a}件あります(照合対象外)。例: ${d.duplicates_a.slice(0, 5).map(k => k.join("/")).join(", ")}`);
   if (s.duplicates_b) warnings.push(`ファイルBにキー重複が${s.duplicates_b}件あります(照合対象外)。例: ${d.duplicates_b.slice(0, 5).map(k => k.join("/")).join(", ")}`);

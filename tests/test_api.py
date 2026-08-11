@@ -77,6 +77,19 @@ class TestFiles:
         assert r.content.decode("cp932") == "a\r\nあ\r\n"
         assert "%E7%B7%A8%E9%9B%86%E6%B8%88" in r.headers["content-disposition"]
 
+    def test_export_unknown_encoding_400(self, client):
+        info = upload(client, "m.csv", load_fixture("master_utf8.csv"))
+        r = client.post(f"/api/export/table/{info['file_id']}",
+                        json={"encoding": "nope-encoding"})
+        assert r.status_code == 400
+        assert "エンコーディング" in r.json()["error"]["message"]
+
+    def test_upload_xls_clear_error(self, client):
+        ole = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 16
+        r = client.post("/api/files", files={"file": ("old.xls", ole)})
+        assert r.status_code == 400
+        assert ".xlsx" in r.json()["error"]["message"]
+
     def test_export_unencodable_400_with_locations(self, client):
         info = upload(client, "m.csv", "col\n𩸽\n".encode("utf-8"))
         r = client.post(f"/api/export/table/{info['file_id']}",
@@ -138,9 +151,11 @@ class TestDiffFlow:
         fb = upload(client, "sf.csv", load_fixture("salesforce_export.csv"))["file_id"]
         r = client.post("/api/automap", json={"file_a": fa, "file_b": fb})
         body = r.json()
-        assert body["by_value"] >= 2  # 社員番号↔EmployeeNumber__c 等が値から推定される
         by = {p["col_a"]: p["col_b"] for p in body["pairs"]}
+        # 名前が一致しない日本語↔SF API名でも辞書・値ベースで対応付けられる
         assert by["社員番号"] == "EmployeeNumber__c"
+        assert by["氏名"] == "Name"
+        assert by["メール"] == "Email"
 
     def test_verify_endpoint_and_export(self, client):
         diff_id, _ = TestDiffFlow().run_diff(client)
@@ -170,6 +185,13 @@ class TestDiffFlow:
         text = r.content.decode("utf-8-sig")
         assert text.splitlines()[0] == "EmployeeNumber__c,Name,Email,Busho__c"
         assert len(text.strip().splitlines()) == 5  # ヘッダー+4行
+
+    def test_export_upsert_nothing_selected_400(self, client):
+        diff_id, _ = self.run_diff(client)
+        r = client.post(f"/api/export/upsert/{diff_id}",
+                        json={"external_id": "社員番号",
+                              "include_insert": False, "include_update": False})
+        assert r.status_code == 400  # 全件出力ではなく明示エラー
 
     def test_export_delete_requires_id_mapping(self, client):
         diff_id, _ = self.run_diff(client)

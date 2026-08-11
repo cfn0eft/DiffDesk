@@ -43,6 +43,10 @@ class TestUpsert:
         t = build_upsert_table(diff, external_id_col_a="社員番号", include={"only_a"})
         assert len(t.rows) == 2
 
+    def test_empty_include_rejected(self, diff):
+        with pytest.raises(DiffDeskError):
+            build_upsert_table(diff, external_id_col_a="社員番号", include=set())
+
     def test_external_id_must_be_key(self, diff):
         with pytest.raises(DiffDeskError):
             build_upsert_table(diff, external_id_col_a="氏名")

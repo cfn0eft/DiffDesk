@@ -42,6 +42,17 @@
     </div>
   </div>
 
+  <div id="next-steps" class="card" hidden>
+    <div class="toolbar">
+      <span><b>両ファイルの読み込みが完了しました。</b>次のステップへ:</span>
+      <button id="btn-omakase" class="primary big">おまかせで差分実行 ▶</button>
+      <span class="hint">(列の対応とキーを自動推定してすぐ比較)</span>
+      <span class="spacer"></span>
+      <button id="btn-swap">A ⇔ B を入れ替え</button>
+      <button id="btn-goto-map">列マッピングを自分で設定 →</button>
+    </div>
+  </div>
+
   <div class="card">
     <h2>読み込み済みファイル・ユーティリティ</h2>
     <div id="file-list"></div>
@@ -73,6 +84,9 @@
       <input id="profile-name" placeholder="プロファイル名" size="12">
       <button id="btn-profile-save">保存</button>
       <button id="btn-profile-delete" class="danger">削除</button>
+      <button id="btn-mapping-import" title="マッピング定義JSONファイルを読み込む">JSONファイル読込</button>
+      <button id="btn-mapping-export" title="現在のマッピングをJSONファイルとして保存">JSON書出</button>
+      <input type="file" id="mapping-file-input" accept=".json,application/json" hidden>
     </div>
     <table class="mapping-table" id="mapping-table">
       <thead><tr><th>A列(マスタ)</th><th></th><th>B列(比較対象)</th><th>キー</th><th>SF項目名(出力用)</th><th></th></tr></thead>

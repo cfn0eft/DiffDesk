@@ -156,6 +156,32 @@ class TestWriteCsv:
         assert t2.rows == t.rows
 
 
+class TestRobustness:
+    def test_write_csv_unknown_encoding(self):
+        t = Table(columns=["a"], rows=[["1"]])
+        with pytest.raises(DiffDeskError):
+            write_csv(t, encoding="nope-encoding")
+
+    def test_write_csv_bad_delimiter(self):
+        t = Table(columns=["a"], rows=[["1"]])
+        with pytest.raises(DiffDeskError):
+            write_csv(t, delimiter=";;")
+
+    def test_xlsx_bytes_as_csv_clear_error(self):
+        raw = load_fixture("master.xlsx")
+        with pytest.raises(DiffDeskError) as ei:
+            load_csv(raw, name="master.csv")
+        assert "xlsx" in str(ei.value)
+
+    def test_old_xls_clear_error(self):
+        ole = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 16
+        with pytest.raises(DiffDeskError) as ei:
+            load_table(ole, "old.xls")
+        assert ".xlsx" in str(ei.value)
+        with pytest.raises(DiffDeskError):
+            load_csv(ole)  # 拡張子がcsvでも中身で検出
+
+
 def test_write_xlsx_roundtrip():
     t = Table(columns=["氏名", "番号"], rows=[["山田", "0001"]])
     raw = write_xlsx(t)

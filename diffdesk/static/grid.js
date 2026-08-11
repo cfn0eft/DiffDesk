@@ -114,6 +114,15 @@ function renderGrid() {
 
   container.querySelectorAll("tbody input:not(.rowcheck)").forEach(inp => {
     inp.onfocus = () => { inp.dataset.orig = inp.value; };
+    inp.onkeydown = e => {
+      if (e.key === "Enter") {  // Enterで同じ列の下のセルへ
+        e.preventDefault();
+        inp.blur();
+        const next = container.querySelector(
+          `input[data-row="${+inp.dataset.row + 1}"][data-col="${inp.dataset.col}"]`);
+        if (next) { next.focus(); next.select(); }
+      }
+    };
     inp.onchange = () => {
       if (inp.value !== inp.dataset.orig) {
         pushUndo({ type: "cell", row: +inp.dataset.row, col: +inp.dataset.col,
@@ -153,6 +162,11 @@ function renderGrid() {
     };
   });
   const totalPages = Math.max(1, Math.ceil(grid.rows.length / PAGE_SIZE));
+  if (grid.page >= totalPages) {  // 行削除等でページが範囲外になったら戻す
+    grid.page = totalPages - 1;
+    renderGrid();
+    return;
+  }
   $("#grid-page-info").textContent = `ページ ${grid.page + 1} / ${totalPages}`;
 }
 
@@ -200,7 +214,8 @@ export function initGrid() {
 
   $("#grid-export").onclick = async () => {
     if (!grid.fileId) return;
-    if (grid.dirty) { $("#grid-save").click(); }
+    if (!await ensureSaved()) return;  // 未保存の編集を確実に反映してから出力
+    updateStatus();
     const enc = $("#grid-export-encoding").value;
     const body = enc === "xlsx" ? { format: "xlsx" } : { encoding: enc };
     try {

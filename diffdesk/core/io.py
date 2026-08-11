@@ -135,8 +135,20 @@ def _rows_to_table(all_rows: list[list[str]], header_row: int, name: str) -> Tab
 
 # ---------------------------------------------------------------- CSV read
 
+_XLSX_MAGIC = b"PK\x03\x04"
+_OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # 旧Office形式(.xls等)
+
+
 def load_csv(raw: bytes, *, name: str = "", encoding: str | None = None,
              delimiter: str | None = None, header_row: int = 0) -> Table:
+    if raw.startswith(_XLSX_MAGIC):
+        raise DiffDeskError(
+            "このファイルはExcel(xlsx)形式のようです。拡張子を .xlsx にして"
+            "読み込み直してください。", filename=name)
+    if raw.startswith(_OLE_MAGIC):
+        raise DiffDeskError(
+            "旧Excel形式(.xls)は未対応です。Excelで「.xlsx」として保存し直して"
+            "ください。", filename=name)
     enc = encoding or detect_encoding(raw)[0]
     text = decode_bytes(raw, enc)
     delim = delimiter or detect_delimiter(text)
@@ -217,6 +229,10 @@ def load_table(raw: bytes, filename: str, *, encoding: str | None = None,
                delimiter: str | None = None, sheet: str | None = None,
                header_row: int = 0) -> Table:
     """拡張子でCSV/Excelを判別して読み込む。"""
+    if filename.lower().endswith(".xls"):
+        raise DiffDeskError(
+            "旧Excel形式(.xls)は未対応です。Excelで「.xlsx」として保存し直して"
+            "ください。", filename=filename)
     if is_excel_filename(filename):
         return load_excel(raw, name=filename, sheet=sheet, header_row=header_row)
     return load_csv(raw, name=filename, encoding=encoding,
@@ -252,6 +268,12 @@ def _find_unencodable(table: Table, encoding: str, limit: int = 20) -> list[dict
 def write_csv(table: Table, *, encoding: str = "utf-8-sig", delimiter: str = ",",
               errors: str = "strict") -> bytes:
     """TableをCSVバイト列にする(CRLF)。encodeできない文字は位置付きでエラー報告。"""
+    if len(delimiter) != 1:
+        raise DiffDeskError(f"区切り文字は1文字で指定してください: {delimiter!r}")
+    try:
+        "test".encode(encoding)
+    except LookupError:
+        raise DiffDeskError(f"不明なエンコーディングです: {encoding}", encoding=encoding)
     buf = _io.StringIO()
     writer = csv.writer(buf, delimiter=delimiter, lineterminator="\r\n",
                         quoting=csv.QUOTE_MINIMAL)

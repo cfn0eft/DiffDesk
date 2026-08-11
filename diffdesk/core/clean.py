@@ -11,6 +11,10 @@ from .model import DiffDeskError, Table
 _HAN_TO_ZEN_ASCII = {i: i + 0xFEE0 for i in range(0x21, 0x7F)}
 _HAN_TO_ZEN_ASCII[0x20] = 0x3000
 
+# 全角英数記号(FF01-FF5E)と全角スペースのみを半角へ(カナ・漢字・①㈱等は不変)
+_ZEN_TO_HAN_ASCII = {i + 0xFEE0: i for i in range(0x21, 0x7F)}
+_ZEN_TO_HAN_ASCII[0x3000] = 0x20
+
 _DATE_PATTERNS = [
     re.compile(r"^(?P<y>\d{4})[/\-.年](?P<m>\d{1,2})[/\-.月](?P<d>\d{1,2})日?$"),
     re.compile(r"^(?P<y>\d{4})(?P<m>\d{2})(?P<d>\d{2})$"),
@@ -24,6 +28,11 @@ def op_trim(v: str) -> str:
 def op_zen2han(v: str) -> str:
     """全角英数記号・スペースを半角に。カタカナはNFKCで全角に統一。"""
     return unicodedata.normalize("NFKC", v)
+
+
+def op_alnum_han(v: str) -> str:
+    """全角英数記号のみ半角に変換(カナ・漢字・①㈱などはそのまま)。"""
+    return v.translate(_ZEN_TO_HAN_ASCII)
 
 
 def op_han2zen(v: str) -> str:
@@ -69,6 +78,7 @@ def op_date_iso(v: str) -> str:
 
 CLEAN_OPS: dict[str, tuple[str, Callable[[str], str]]] = {
     "trim": ("前後の空白を除去", op_trim),
+    "alnum_han": ("全角英数記号→半角(それ以外は変えない)", op_alnum_han),
     "zen2han": ("全角英数→半角・半角カナ→全角(NFKC)", op_zen2han),
     "han2zen": ("半角英数→全角", op_han2zen),
     "kana_zenkaku": ("半角カナ→全角カナ", op_kana_zenkaku),
