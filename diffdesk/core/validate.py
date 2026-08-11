@@ -32,6 +32,7 @@ class ValidationRules:
     formats: dict[str, str] = field(default_factory=dict)      # 列名 -> FORMAT_CHECKSのキー
     max_lengths: dict[str, int] = field(default_factory=dict)  # 列名 -> 最大文字数
     allowed_values: dict[str, list[str]] = field(default_factory=dict)  # 列名 -> 許可値(ピックリスト)
+    ranges: dict[str, list[float | None]] = field(default_factory=dict)  # 列名 -> [最小, 最大](検査値の基準範囲等。Noneは片側なし)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -45,6 +46,8 @@ class ValidationRules:
             max_lengths={str(k): int(v) for k, v in d.get("max_lengths", {}).items()},
             allowed_values={str(k): [str(x) for x in v]
                             for k, v in d.get("allowed_values", {}).items()},
+            ranges={str(k): [None if x is None else float(x) for x in v]
+                    for k, v in d.get("ranges", {}).items()},
         )
 
 
@@ -94,6 +97,9 @@ def validate_table(table: Table, rules: ValidationRules,
     len_idx = [(c, table.col_index(c), n) for c, n in rules.max_lengths.items()]
     allow_idx = [(c, table.col_index(c), {v.strip() for v in vals})
                  for c, vals in rules.allowed_values.items()]
+    range_idx = [(c, table.col_index(c),
+                  (v[0] if len(v) > 0 else None), (v[1] if len(v) > 1 else None))
+                 for c, v in rules.ranges.items()]
 
     for ri, row in enumerate(table.rows, start=1):
         for col, i in req_idx:
@@ -120,5 +126,24 @@ def validate_table(table: Table, rules: ValidationRules,
                 if add(ValidationIssue(
                         row=ri, column=col, code="allowed_values", value=v,
                         message=f"{col} が許可値にありません: {v}")):
+                    return issues
+        for col, i, lo, hi in range_idx:
+            v = row[i].strip()
+            if not v:
+                continue
+            try:
+                num = float(v)
+            except ValueError:
+                if add(ValidationIssue(
+                        row=ri, column=col, code="range", value=v,
+                        message=f"{col} が数値ではないため範囲判定できません: {v}")):
+                    return issues
+                continue
+            if (lo is not None and num < lo) or (hi is not None and num > hi):
+                lo_s = "" if lo is None else str(lo)
+                hi_s = "" if hi is None else str(hi)
+                if add(ValidationIssue(
+                        row=ri, column=col, code="range", value=v,
+                        message=f"{col} が基準範囲外です: {v}(範囲 {lo_s}〜{hi_s})")):
                     return issues
     return issues

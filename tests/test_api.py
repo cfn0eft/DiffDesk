@@ -277,6 +277,74 @@ class TestV040Features:
         assert {"fill_down", "digits_only", "alnum_han"} <= ops
 
 
+class TestV050Features:
+    def test_restore_export(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        r = client.post(f"/api/export/restore/{diff_id}", json={})
+        text = r.content.decode("utf-8-sig")
+        assert "hanako-new@example.com" in text  # 投入前のB値
+        assert len(text.strip().splitlines()) == 3  # ヘッダー+changed2行
+
+    def test_undo_delete(self, client):
+        raw = ("ID,STATUS\na01x,Item Created\na01y,Item Updated\n").encode("utf-8")
+        fid = upload(client, "success.csv", raw)["file_id"]
+        r = client.post(f"/api/files/{fid}/undo-delete", json={})
+        assert r.status_code == 200
+        text = r.content.decode("utf-8-sig")
+        assert text.strip().splitlines() == ["Id", "a01x"]
+        assert r.headers["X-Skipped-Updates"] == "1"
+
+    def test_html_report(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        r = client.post(f"/api/export/html/{diff_id}", json={})
+        html_text = r.content.decode("utf-8")
+        assert "<!DOCTYPE html>" in html_text and "要確認" in html_text
+
+    def test_profile_and_baseline(self, client):
+        fid = upload(client, "m.csv", load_fixture("master_utf8.csv"))["file_id"]
+        p = client.post(f"/api/files/{fid}/profile", json={}).json()
+        assert p["rows"] == 5
+        client.post(f"/api/files/{fid}/save-baseline", json={"name": "月次"})
+        assert client.get("/api/baselines").json()["baselines"] == ["月次"]
+        w = client.post(f"/api/files/{fid}/compare-baseline",
+                        json={"name": "月次"}).json()["warnings"]
+        assert w[0]["level"] == "info"  # 同一ファイルなので変化なし
+
+    def test_fuzzy_match_and_link(self, client):
+        fa = upload(client, "a.csv", "氏名\n山田太郎\n鈴木花子\n".encode("utf-8"))["file_id"]
+        fb = upload(client, "b.csv", "name\n山田 太郎\n別人\n".encode("utf-8"))["file_id"]
+        r = client.post("/api/fuzzy-match", json={
+            "file_a": fa, "file_b": fb, "pairs": [["氏名", "name"]], "threshold": 0.7,
+        }).json()
+        assert r["count"] == 1
+        assert r["candidates"][0]["values_a"] == ["山田太郎"]
+        r2 = client.post("/api/fuzzy-link", json={
+            "file_a": fa, "file_b": fb, "matches": r["candidates"],
+        }).json()
+        assert r2["preview"]["columns"] == ["氏名", "name", "突合スコア"]
+
+    def test_crosstab(self, client):
+        raw = "群,性別\nG1,雄\nG1,雌\nG2,雄\n".encode("utf-8")
+        fid = upload(client, "g.csv", raw)["file_id"]
+        r = client.post(f"/api/files/{fid}/crosstab",
+                        json={"row_col": "群", "col_col": "性別"}).json()
+        assert r["table"]["columns"] == ["群\\性別", "雄", "雌", "(合計)"]
+
+    def test_split_address(self, client):
+        raw = "住所\n東京都港区芝1-2-3\n".encode("utf-8")
+        fid = upload(client, "addr.csv", raw)["file_id"]
+        r = client.post(f"/api/files/{fid}/split-address", json={"column": "住所"}).json()
+        assert r["parsed"] == 1
+        assert "住所_都道府県" in r["preview"]["columns"]
+
+    def test_validate_ranges(self, client):
+        raw = "ALT\n25\n70\n".encode("utf-8")
+        fid = upload(client, "lab.csv", raw)["file_id"]
+        r = client.post(f"/api/files/{fid}/validate",
+                        json={"ranges": {"ALT": [10, 50]}}).json()
+        assert r["count"] == 1 and "範囲外" in r["issues"][0]["message"]
+
+
 class TestProfiles:
     def test_save_load_list_delete(self, client):
         profile = {

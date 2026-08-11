@@ -3,7 +3,23 @@
 このパッケージはCLI・スクリプト・他UIからそのまま再利用できる。
 fastapi等のwebライブラリをimportしてはならない。
 """
+from .address import split_address, split_address_column
 from .anonymize import ANONYMIZE_MODES, anonymize_columns
+from .fuzzy import FuzzyCandidate, build_linked_table, fuzzy_match
+from .profile_stats import (
+    compare_profiles,
+    list_baselines,
+    load_baseline,
+    profile_table,
+    save_baseline,
+)
+from .report_html import build_html_report
+from .rollback import (
+    build_restore_table,
+    build_undo_delete_table,
+    find_success_id_column,
+)
+from .stats import crosstab
 from .clean import CLEAN_OPS, COLUMN_OPS, clean_columns
 from .cluster import ValueCluster, apply_value_map, cluster_column, fingerprint
 from .loader_errors import (

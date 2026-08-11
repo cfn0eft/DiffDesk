@@ -59,8 +59,23 @@
       <label>対象ファイル: <select id="err-file-select"><option value="">(選択)</option></select></label>
       <button id="btn-analyze-errors" class="primary">分析</button>
       <button id="btn-export-retry">再投入用CSVを出力(ERROR列除去)</button>
+      <button id="btn-undo-delete" title="successファイル(ID/STATUS列付き)から、新規作成されたレコードの取り消し用delete CSVを生成します">success.csvから取り消し用delete CSV</button>
     </div>
     <div id="err-analysis"></div>
+  </details>
+
+  <details class="card sub">
+    <summary>ファイル健康診断(列プロファイル+「いつもと違う」検知)</summary>
+    <div class="toolbar wrap">
+      <label>対象ファイル: <select id="health-file-select"><option value="">(選択)</option></select></label>
+      <button id="btn-health-check" class="primary">診断</button>
+      <input id="baseline-name" placeholder="基準名(例: 月次マスタ)" size="14">
+      <button id="btn-baseline-save">基準として保存</button>
+      <label>基準と比較: <select id="baseline-select"><option value="">(基準)</option></select></label>
+      <button id="btn-baseline-compare">比較</button>
+    </div>
+    <div id="health-warnings"></div>
+    <div id="health-result"></div>
   </details>
 
   <div class="card">
@@ -123,6 +138,20 @@
     </div>
   </div>
 
+  <details class="card sub">
+    <summary>キーなし あいまい突合(共通キーがない2ファイルを類似度で紐づけ)</summary>
+    <div class="toolbar wrap">
+      <span>比較する列ペア:</span>
+      <select id="fz-col-a"></select> ↔ <select id="fz-col-b"></select>
+      <button id="fz-add-pair" class="mini">＋追加</button>
+      <span id="fz-pairs" class="hint">(未指定)</span>
+      <label>しきい値: <input id="fz-threshold" type="number" min="0.5" max="1" step="0.05" value="0.75" style="width:64px"></label>
+      <button id="fz-detect" class="primary">候補を検出</button>
+      <button id="fz-link" hidden>チェックした組で紐づけ結果を作成</button>
+    </div>
+    <div id="fz-list" class="scroll-x"></div>
+  </details>
+
   <div class="actionbar">
     <button id="btn-run-diff" class="primary big">差分を実行 ▶</button>
   </div>
@@ -173,6 +202,8 @@
         <button id="btn-export-sdl">.sdlマッピング</button>
         <button id="btn-export-report-csv">差分レポートCSV</button>
         <button id="btn-export-report-xlsx">差分レポートExcel(色付き)</button>
+        <button id="btn-export-html">共有用HTMLレポート</button>
+        <button id="btn-export-restore" title="変更対象行の投入前のSalesforce値をupdate用CSVとして保存。投入後にこのCSVをupdateすれば元に戻せます">復元用CSV(投入前のSF値)</button>
         <span class="spacer"></span>
         <label><input type="checkbox" id="merge-include-b"> Bのみ行も含める</label>
         <button id="btn-merge">マージ結果を新規ファイル化</button>
@@ -247,6 +278,12 @@
           <select id="val-allow-src-col"><option value="">(列)</option></select>
         </label>
         <button id="val-allow-fetch" class="mini">取得</button>
+      </div>
+      <div class="toolbar wrap">
+        <label>基準範囲チェック(検査値等): <select id="val-range-col"><option value="">(列)</option></select></label>
+        <input id="val-range-min" type="number" step="any" placeholder="最小" style="width:80px">
+        <span>〜</span>
+        <input id="val-range-max" type="number" step="any" placeholder="最大" style="width:80px">
         <button id="val-do" class="primary">検証実行</button>
       </div>
       <div id="val-result"></div>
@@ -262,12 +299,23 @@
       <div id="cluster-list"></div>
     </details>
     <details class="card sub">
+      <summary>クロス集計(群構成チェック等)</summary>
+      <div class="toolbar wrap">
+        <label>行: <select id="ct-row"></select></label>
+        <label>列(任意): <select id="ct-col"><option value="">(なし=度数集計)</option></select></label>
+        <button id="ct-do" class="primary">集計</button>
+        <button id="ct-save" hidden>集計を新規ファイル化</button>
+      </div>
+      <div id="ct-result" class="scroll-x"></div>
+    </details>
+    <details class="card sub">
       <summary>列分割・匿名化</summary>
       <div class="toolbar wrap">
         <label>列分割: <select id="split-col"></select></label>
         <input id="split-delim" placeholder="区切り(例: 空白、-)" size="10">
         <button id="split-do">分割</button>
-        <span class="hint">「列名_1」「列名_2」…に置き換わります</span>
+        <button id="addr-do" title="住所列を 郵便番号/都道府県/市区町村/以降 の4列に分割">住所として分割</button>
+        <span class="hint">「列名_1」「列名_2」…(住所は郵便番号/都道府県/市区町村/以降)に置き換わります</span>
       </div>
       <div class="toolbar wrap">
         <label>匿名化: <select id="anon-col"></select></label>

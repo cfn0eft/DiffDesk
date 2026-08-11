@@ -133,7 +133,7 @@ export async function refreshFileList() {
       <td><button class="mini file-del" data-id="${f.file_id}">削除</button></td>
     </tr>`).join("") + `</tbody></table>`;
   // エラーファイル分析・許可値取得用のファイルセレクトも更新
-  for (const selId of ["#err-file-select", "#val-allow-src-file"]) {
+  for (const selId of ["#err-file-select", "#val-allow-src-file", "#health-file-select"]) {
     const sel = $(selId);
     if (!sel) continue;
     const cur = sel.value;
@@ -218,6 +218,136 @@ $("#btn-export-retry").onclick = async () => {
   } catch (e) { toast(e.message, true); }
 };
 
+$("#btn-undo-delete").onclick = async () => {
+  const fid = $("#err-file-select").value;
+  if (!fid) return toast("successファイルを選択してください", true);
+  const ok = await showDialog(`<h2>取り消し用delete CSV</h2>
+    <p>successファイル内で<strong>新規作成(Item Created)されたレコードのId</strong>を
+    Data LoaderのDelete操作用CSVとして出力します。</p>
+    <p class="hint" style="color:#dc2626">⚠ 削除は元に戻せません。出力内容を必ず確認してから投入してください。</p>`);
+  if (!ok) return;
+  try {
+    const res = await api(`/api/files/${fid}/undo-delete`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const skipped = res.headers.get("X-Skipped-Updates");
+    await downloadResponse(res, "undo_delete.csv");
+    toast(`取り消し用delete CSVを出力しました` +
+          (skipped && skipped !== "0" ? `(update成功行${skipped}件は除外)` : ""));
+  } catch (e) { toast(e.message, true); }
+};
+
+// ---------------------------------------------------------------- ファイル健康診断
+async function refreshBaselines() {
+  try {
+    const { baselines } = await apiJson("/api/baselines");
+    $("#baseline-select").innerHTML = `<option value="">(基準)</option>` +
+      baselines.map(b => `<option>${escapeHtml(b)}</option>`).join("");
+  } catch { /* 起動直後は無視 */ }
+}
+
+$("#btn-health-check").onclick = async () => {
+  const fid = $("#health-file-select").value;
+  if (!fid) return toast("対象ファイルを選択してください", true);
+  try {
+    const p = await postJson(`/api/files/${fid}/profile`, {});
+    $("#health-warnings").innerHTML = "";
+    $("#health-result").innerHTML =
+      `<p>全${p.rows}行</p><table><thead><tr><th>列</th><th>型</th><th>空欄率</th><th>ユニーク数</th><th>最大文字数</th><th>上位の値</th></tr></thead><tbody>` +
+      p.columns.map(c => `<tr><td>${escapeHtml(c.name)}</td><td>${c.type}</td>` +
+        `<td>${(c.empty_rate * 100).toFixed(1)}%</td><td>${c.unique}</td><td>${c.max_length}</td>` +
+        `<td class="hint">${c.top_values.map(t => `${escapeHtml(t.value)}(${t.count})`).join("、")}</td></tr>`).join("") +
+      `</tbody></table>`;
+  } catch (e) { toast(e.message, true); }
+};
+
+$("#btn-baseline-save").onclick = async () => {
+  const fid = $("#health-file-select").value;
+  const name = $("#baseline-name").value.trim();
+  if (!fid || !name) return toast("ファイルと基準名を指定してください", true);
+  try {
+    await postJson(`/api/files/${fid}/save-baseline`, { name });
+    toast(`基準「${name}」を保存しました。来月は同じファイルを「比較」するだけです。`);
+    refreshBaselines();
+  } catch (e) { toast(e.message, true); }
+};
+
+$("#btn-baseline-compare").onclick = async () => {
+  const fid = $("#health-file-select").value;
+  const name = $("#baseline-select").value;
+  if (!fid || !name) return toast("ファイルと基準を選択してください", true);
+  try {
+    const { warnings } = await postJson(`/api/files/${fid}/compare-baseline`, { name });
+    $("#health-warnings").innerHTML = warnings.map(w =>
+      `<div class="${w.level === "warn" ? "issue" : "hint"}" style="${w.level === "warn" ? "color:#9c3a2e" : ""}">・${escapeHtml(w.message)}</div>`).join("");
+  } catch (e) { toast(e.message, true); }
+};
+
+// ---------------------------------------------------------------- キーなしあいまい突合
+const fzPairs = [];
+let fzCandidates = [];
+
+function renderFzPairs() {
+  $("#fz-pairs").textContent = fzPairs.length
+    ? fzPairs.map(p => `${p[0]}↔${p[1]}`).join("、") : "(未指定)";
+}
+
+function fillFuzzySelects() {
+  $("#fz-col-a").innerHTML = (state.fileA?.preview.columns || []).map(c =>
+    `<option>${escapeHtml(c)}</option>`).join("");
+  $("#fz-col-b").innerHTML = (state.fileB?.preview.columns || []).map(c =>
+    `<option>${escapeHtml(c)}</option>`).join("");
+}
+
+$("#fz-add-pair").onclick = () => {
+  const a = $("#fz-col-a").value, b = $("#fz-col-b").value;
+  if (!a || !b) return toast("先にファイルA・Bを読み込んでください", true);
+  fzPairs.push([a, b]);
+  renderFzPairs();
+};
+
+$("#fz-detect").onclick = async () => {
+  if (!state.fileA || !state.fileB) return toast("先にファイルA・Bを読み込んでください", true);
+  if (!fzPairs.length) return toast("「＋追加」で比較する列ペアを指定してください", true);
+  try {
+    const r = await postJson("/api/fuzzy-match", {
+      file_a: state.fileA.file_id, file_b: state.fileB.file_id,
+      pairs: fzPairs, threshold: parseFloat($("#fz-threshold").value) || 0.75,
+    });
+    fzCandidates = r.candidates;
+    if (!r.count) {
+      $("#fz-list").innerHTML = `<p class="hint">しきい値以上の候補が見つかりませんでした。しきい値を下げてみてください。</p>`;
+      $("#fz-link").hidden = true;
+      return;
+    }
+    $("#fz-list").innerHTML =
+      `<table><thead><tr><th></th><th>スコア</th>` +
+      r.columns_a.map((c, i) => `<th>A: ${escapeHtml(c)} / B: ${escapeHtml(r.columns_b[i])}</th>`).join("") +
+      `</tr></thead><tbody>` +
+      r.candidates.map((c, k) => `<tr>
+        <td><input type="checkbox" class="fz-use" data-k="${k}" ${c.score >= 0.9 ? "checked" : ""}></td>
+        <td><b>${(c.score * 100).toFixed(0)}%</b></td>` +
+        c.values_a.map((va, i) =>
+          `<td>${escapeHtml(va)}<br><span class="hint">${escapeHtml(c.values_b[i])}</span></td>`).join("") +
+        `</tr>`).join("") + `</tbody></table>`;
+    $("#fz-link").hidden = false;
+    toast(`${r.count}組の候補が見つかりました(90%以上は自動チェック済み)`);
+  } catch (e) { toast(e.message, true); }
+};
+
+$("#fz-link").onclick = async () => {
+  const matches = $$(".fz-use:checked").map(cb => fzCandidates[+cb.dataset.k]);
+  if (!matches.length) return toast("紐づける組にチェックを入れてください", true);
+  try {
+    const info = await postJson("/api/fuzzy-link", {
+      file_a: state.fileA.file_id, file_b: state.fileB.file_id, matches,
+    });
+    toast(`紐づけ結果ファイルを作成しました(${info.preview.total_rows}行)。グリッド編集タブで開けます。`);
+    refreshFileList();
+  } catch (e) { toast(e.message, true); }
+};
+
 // ---------------------------------------------------------------- マッピング
 const FILTER_OPS = [
   ["eq", "＝"], ["ne", "≠"], ["contains", "を含む"], ["not_contains", "を含まない"],
@@ -233,6 +363,7 @@ function colOptions(cols, selected) {
 export function rebuildMappingSelects() {
   renderMappingTable();
   renderFilters();
+  fillFuzzySelects();
 }
 
 function renderMappingTable() {
@@ -582,4 +713,5 @@ function restorePrefs() {
 initGrid();
 restorePrefs();
 refreshProfiles();
+refreshBaselines();
 refreshFileList();

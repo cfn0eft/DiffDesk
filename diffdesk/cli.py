@@ -16,6 +16,7 @@ from pathlib import Path
 
 from .core import (
     DiffDeskError,
+    build_html_report,
     build_verification,
     build_verification_table,
     build_verification_xlsx,
@@ -161,6 +162,74 @@ def cmd_verify(args) -> int:
     return 0 if v.passed else 1
 
 
+def cmd_watch(args) -> int:
+    """フォルダ監視: 新しいCSV/Excelが置かれたら自動でマスタと突合検証する。"""
+    import time
+
+    watch_dir = Path(args.dir)
+    out_dir = Path(args.out)
+    if not watch_dir.is_dir():
+        raise DiffDeskError(f"監視フォルダがありません: {watch_dir}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    profile = load_profile(args.profile)
+    if not profile.mapping.key_pairs:
+        ext = args.external_id or profile.external_id
+        if ext:
+            for p in profile.mapping.pairs:
+                if p.col_a == ext:
+                    p.is_key = True
+
+    exts = (".csv", ".tsv", ".xlsx")
+    seen: dict[str, float] = {}
+    if not args.process_existing:
+        for f in watch_dir.iterdir():
+            if f.suffix.lower() in exts:
+                seen[f.name] = f.stat().st_mtime
+    print(f"監視開始: {watch_dir} → レポート出力先: {out_dir}(Ctrl+Cで終了)")
+
+    def stable(f: Path) -> bool:
+        s1 = f.stat().st_size
+        time.sleep(1)
+        return f.stat().st_size == s1
+
+    while True:
+        try:
+            for f in sorted(watch_dir.iterdir()):
+                if f.suffix.lower() not in exts:
+                    continue
+                mtime = f.stat().st_mtime
+                if seen.get(f.name) == mtime:
+                    continue
+                if not stable(f):
+                    continue  # 書き込み途中。次周期で処理
+                seen[f.name] = mtime
+                print(f"[{time.strftime('%H:%M:%S')}] 検出: {f.name} → 検証中...")
+                try:
+                    a = _load(args.master, sheet=args.sheet_a)
+                    b = load_table(f.read_bytes(), f.name)
+                    result = diff_tables(a, b, profile.mapping, profile.options,
+                                         profile.row_filter)
+                    v = build_verification(result,
+                                           only_b_is_error=not args.allow_only_b)
+                    stamp = time.strftime("%Y%m%d_%H%M%S")
+                    base = out_dir / f"{f.stem}_{stamp}"
+                    Path(f"{base}_検証.xlsx").write_bytes(build_verification_xlsx(
+                        result, only_b_is_error=not args.allow_only_b))
+                    Path(f"{base}_レポート.html").write_text(
+                        build_html_report(result,
+                                          only_b_is_error=not args.allow_only_b),
+                        encoding="utf-8")
+                    mark = "✔ OK" if v.passed else "✖ 要確認"
+                    print(f"  {mark}: 一致{v.same} 変更{v.changed} "
+                          f"未投入{v.only_a} 想定外{v.only_b} → {base}_*.xlsx/.html")
+                except DiffDeskError as e:
+                    print(f"  エラー: {e.message}", file=sys.stderr)
+            time.sleep(args.interval)
+        except KeyboardInterrupt:
+            print("\n監視を終了しました。")
+            return 0
+
+
 def cmd_convert(args) -> int:
     t = _load(args.file, encoding=args.in_encoding, sheet=args.sheet,
               header_row=args.header_row)
@@ -238,6 +307,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--report", help="検証レポートの出力先(.xlsx または .csv)")
     add_out_encoding(p)
     p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("watch", help="フォルダ監視: 置かれたファイルをマスタと自動突合検証")
+    p.add_argument("dir", help="監視するフォルダ")
+    p.add_argument("--master", required=True, help="比較元マスタ(A)のファイル")
+    p.add_argument("--profile", required=True, help="プロファイル名またはJSONパス")
+    p.add_argument("--out", required=True, help="レポート出力フォルダ")
+    p.add_argument("--interval", type=int, default=5, help="チェック間隔秒(既定5)")
+    p.add_argument("--sheet-a", help="マスタのシート名(Excel)")
+    p.add_argument("--external-id", help="キー列(キー未指定のマッピングJSON用)")
+    p.add_argument("--allow-only-b", action="store_true", help="Bのみ行を問題にしない")
+    p.add_argument("--process-existing", action="store_true",
+                   help="起動時に既にあるファイルも処理する")
+    p.set_defaults(func=cmd_watch)
 
     p = sub.add_parser("convert", help="エンコーディング/形式変換(CSV↔Excel)")
     _add_input_options(p, two_files=False)
