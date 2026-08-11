@@ -47,8 +47,146 @@ export function renderDiff() {
     b.classList.toggle("active", b.dataset.status === ""));
   renderStatusbar();
   loadVerification();
+  loadColumnsSummary();
+  loadHistory();
+  loadKnownList();
   loadRows();
 }
+
+// ---------------------------------------------------------------- 列ごとの差異サマリー
+async function loadColumnsSummary() {
+  const d = state.diff;
+  if (!d) return;
+  try {
+    const r = await (await api(`/api/diff/${d.diff_id}/columns-summary`)).json();
+    if (!r.columns.length) {
+      $("#columns-summary").innerHTML = "";
+      return;
+    }
+    $("#columns-summary").innerHTML =
+      `<span class="hint">差異の多い項目:</span> ` +
+      r.columns.map(c =>
+        `<button class="mini colsum" title="クリックで変更行のみ表示">${escapeHtml(c.column)} (${c.count})</button>`
+      ).join(" ");
+    $$("#columns-summary .colsum").forEach(b => b.onclick = () => {
+      currentStatus = "changed";
+      currentOffset = 0;
+      $$(".statusfilter").forEach(x =>
+        x.classList.toggle("active", x.dataset.status === "changed"));
+      loadRows();
+    });
+  } catch { /* 表示のみなので無視 */ }
+}
+
+// ---------------------------------------------------------------- 照合履歴
+async function loadHistory() {
+  try {
+    const r = await (await api("/api/history?limit=30")).json();
+    if (!r.history.length) {
+      $("#history-list").innerHTML = `<p class="hint">まだ履歴がありません。</p>`;
+      return;
+    }
+    $("#history-list").innerHTML =
+      `<table><thead><tr><th>日時</th><th>基準(A)</th><th>比較(B)</th>` +
+      `<th>一致率</th><th>変更</th><th>未登録</th><th>判定</th></tr></thead><tbody>` +
+      r.history.map(h => {
+        const pct = (h.match_rate * 100).toFixed(1);
+        return `<tr><td>${escapeHtml(h.at)}</td><td>${escapeHtml(h.name_a)}</td>` +
+          `<td>${escapeHtml(h.name_b)}</td>` +
+          `<td><div class="trendbar"><div style="width:${pct}%"></div></div> ${pct}%</td>` +
+          `<td>${h.changed}</td><td>${h.only_a}</td>` +
+          `<td>${h.passed ? "✔" : "✖"}</td></tr>`;
+      }).join("") + `</tbody></table>`;
+  } catch { /* 無視 */ }
+}
+$("#history-refresh").onclick = loadHistory;
+$("#history-clear").onclick = async () => {
+  await api("/api/history", { method: "DELETE" });
+  loadHistory();
+  toast("照合履歴を削除しました");
+};
+
+// ---------------------------------------------------------------- 既知差分の管理
+async function loadKnownList() {
+  try {
+    const r = await (await api("/api/known-diffs")).json();
+    if (!r.entries.length) {
+      $("#known-list").innerHTML = `<p class="hint">登録済みの既知差分はありません。</p>`;
+      return;
+    }
+    $("#known-list").innerHTML =
+      `<table><thead><tr><th>種類</th><th>キー</th><th>内容</th><th>登録日</th><th></th></tr></thead><tbody>` +
+      r.entries.map((e, i) => {
+        const desc = e.type === "cell"
+          ? `${escapeHtml(e.col_a)}: ${escapeHtml(e.value_a)} → ${escapeHtml(e.value_b)}`
+          : (e.status === "only_a" ? "比較先に無い(未登録を容認)" : "基準に無い(存在を容認)");
+        return `<tr><td>${e.type === "cell" ? "セル差分" : "欠落"}</td>` +
+          `<td>${escapeHtml(e.key.join("/"))}</td><td>${desc}</td>` +
+          `<td class="hint">${escapeHtml(e.added_at || "")}</td>` +
+          `<td><button class="mini danger known-del" data-i="${i}">削除</button></td></tr>`;
+      }).join("") + `</tbody></table>`;
+    $$(".known-del").forEach(b => b.onclick = async () => {
+      await api(`/api/known-diffs/${b.dataset.i}`, { method: "DELETE" });
+      refreshAfterKnownChange();
+    });
+  } catch (e) { toast(e.message, true); }
+}
+$("#known-refresh").onclick = loadKnownList;
+$("#known-clear-all").onclick = async () => {
+  await api("/api/known-diffs", { method: "DELETE" });
+  refreshAfterKnownChange();
+  toast("既知差分を全て削除しました");
+};
+
+function refreshAfterKnownChange() {
+  loadKnownList();
+  if (state.diff) {
+    loadVerification();
+    loadColumnsSummary();
+    loadRows();
+  }
+}
+
+async function registerKnown(entry) {
+  try {
+    await postJson("/api/known-diffs", { entry });
+    toast("既知差分として登録しました。以後の照合では問題に数えません。");
+    $("#dialog").close();
+    refreshAfterKnownChange();
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---------------------------------------------------------------- 差分ジャンプ
+let jumpIndex = -1;
+
+function jumpTo(delta) {
+  const problems = [];
+  $$("#diff-table tbody tr").forEach((tr, i) => {
+    const r = currentRows[+tr.dataset.ri];
+    if (r && r.status !== "same" && !r.known) problems.push(i);
+  });
+  if (!problems.length) return toast("このページに要確認行はありません");
+  const pos = problems.indexOf(jumpIndex);
+  let next;
+  if (pos === -1) next = delta > 0 ? problems[0] : problems[problems.length - 1];
+  else next = problems[(pos + delta + problems.length) % problems.length];
+  jumpIndex = next;
+  const trs = $$("#diff-table tbody tr");
+  trs.forEach(tr => tr.classList.remove("jump-current"));
+  const tr = trs[next];
+  tr.classList.add("jump-current");
+  tr.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+$("#jump-next").onclick = () => jumpTo(1);
+$("#jump-prev").onclick = () => jumpTo(-1);
+document.addEventListener("keydown", e => {
+  if (!$("#tab-diff").classList.contains("active")) return;
+  if ($("#dialog").open) return;
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
+  if (e.key === "n") jumpTo(1);
+  if (e.key === "p") jumpTo(-1);
+});
 
 // ---------------------------------------------------------------- 投入検証
 async function loadVerification() {
@@ -134,9 +272,26 @@ async function loadRows() {
 function choiceKey(row, colA) { return JSON.stringify([row.key, colA]); }
 
 let currentRows = [];  // 表示中ページの行(詳細パネル用)
+let viewMode = localStorage.getItem("diffdesk-viewmode") || "merged";
+
+function matchLabelFor(r, nValues) {
+  if (r.known && (r.status === "only_a" || r.status === "only_b")) return "既知(容認)";
+  if (r.status === "same") {
+    return r.known_diffs?.length
+      ? `<b>${nValues}/${nValues}</b> <span class="hint">(既知${r.known_diffs.length})</span>`
+      : `<b>${nValues}/${nValues}</b> 一致`;
+  }
+  if (r.status === "changed") return `<b>${nValues - r.cell_diffs.length}/${nValues}</b> 一致`;
+  if (r.status === "only_a") return "未登録";
+  return "基準に無し";
+}
 
 function renderRowsTable(rows) {
   currentRows = rows;
+  if (viewMode === "split") {
+    renderSplitTable(rows);
+    return;
+  }
   const d = state.diff;
   const nCols = d.columns_a.length;
   const nValues = d.key_flags.filter(f => !f).length;
@@ -145,12 +300,7 @@ function renderRowsTable(rows) {
     return `<th>${d.key_flags[i] ? "🔑 " : ""}${escapeHtml(label)}</th>`;
   }).join("") + `</tr>`;
 
-  const matchLabel = r => {
-    if (r.status === "same") return `<b>${nValues}/${nValues}</b> 一致`;
-    if (r.status === "changed") return `<b>${nValues - r.cell_diffs.length}/${nValues}</b> 一致`;
-    if (r.status === "only_a") return "未登録";
-    return "基準に無し";
-  };
+  const matchLabel = r => matchLabelFor(r, nValues);
 
   const body = rows.map((r, ri) => {
     const cells = [];
@@ -190,6 +340,63 @@ function renderRowsTable(rows) {
   });
 }
 
+// 左右分割表示: 左=基準(A)、右=比較(B)をレコード対で並べる
+function renderSplitTable(rows) {
+  const d = state.diff;
+  const nCols = d.columns_a.length;
+  const nValues = d.key_flags.filter(f => !f).length;
+
+  const groupHead = `<tr class="grouphead"><th colspan="2"></th>` +
+    `<th colspan="${nCols}" class="side-a-h">基準ファイル (A)</th>` +
+    `<th colspan="${nCols}" class="side-b-h b-sep">比較ファイル (B)</th></tr>`;
+  const colHead = `<tr><th>状態</th><th>照合</th>` +
+    d.columns_a.map((c, i) =>
+      `<th>${d.key_flags[i] ? "🔑 " : ""}${escapeHtml(c)}</th>`).join("") +
+    d.columns_b.map((c, i) =>
+      `<th${i === 0 ? ' class="b-sep"' : ""}>${d.key_flags[i] ? "🔑 " : ""}${escapeHtml(c)}</th>`).join("") +
+    `</tr>`;
+
+  const body = rows.map((r, ri) => {
+    const changed = new Set(r.cell_diffs.map(cd => cd.col_a));
+    const sideCells = (rowVals, absentLabel) => d.columns_a.map((colA, i) => {
+      const sep = "";
+      if (!rowVals) {
+        return `<td class="absent">${i === Math.floor(nCols / 2) ? absentLabel : ""}</td>`;
+      }
+      const cls = changed.has(colA) ? "cell-changed" : "";
+      return `<td class="${cls}">${escapeHtml(rowVals[i])}</td>`;
+    });
+    const cellsA = sideCells(r.row_a, "(基準に無し)");   // A側が空 = 基準に存在しない
+    const cellsB = sideCells(r.row_b, "(未登録)");       // B側が空 = 比較先に未登録
+    // B側の先頭セルに区切り線クラスを付与
+    cellsB[0] = cellsB[0].replace("<td class=\"", "<td class=\"b-sep ")
+                         .replace("<td class=\"b-sep absent", "<td class=\"b-sep absent");
+    return `<tr class="row-${r.status}" data-ri="${ri}">` +
+      `<td>${STATUS_JA[r.status]}</td><td class="matchcell">${matchLabelFor(r, nValues)}</td>` +
+      cellsA.join("") + cellsB.join("") + `</tr>`;
+  }).join("");
+
+  $("#diff-table").innerHTML = `<thead>${groupHead}${colHead}</thead><tbody>${body}</tbody>`;
+  $$("#diff-table tbody tr").forEach(tr => {
+    tr.onclick = () => showRecordDetail(currentRows[+tr.dataset.ri]);
+  });
+}
+
+$("#view-merged").onclick = () => setViewMode("merged");
+$("#view-split").onclick = () => setViewMode("split");
+
+function setViewMode(mode) {
+  viewMode = mode;
+  try { localStorage.setItem("diffdesk-viewmode", mode); } catch { /* 無視 */ }
+  $("#view-merged").classList.toggle("active", mode === "merged");
+  $("#view-split").classList.toggle("active", mode === "split");
+  renderRowsTable(currentRows);
+}
+
+// 起動時に前回の表示形式を反映
+$("#view-merged").classList.toggle("active", viewMode === "merged");
+$("#view-split").classList.toggle("active", viewMode === "split");
+
 // レコード詳細: 1件の全項目を基準↔比較で縦に並べて照合表示
 function showRecordDetail(r) {
   if (!r) return;
@@ -204,24 +411,40 @@ function showRecordDetail(r) {
     else if (r.status === "only_a") { mark = "－"; cls = "detail-miss"; }
     else if (r.status === "only_b") { mark = "－"; cls = "detail-miss"; }
     else if (changed.has(colA)) { mark = "✖"; cls = "detail-ng"; }
+    else if (r.known_diffs?.some(kd => kd.col_a === colA)) { mark = "済"; cls = "detail-ok"; }
     else { mark = "✔"; cls = "detail-ok"; }
     const label = colA === colB ? colA : `${colA} / ${colB}`;
+    const knownBtn = changed.has(colA)
+      ? `<button class="mini known-cell-btn" data-col="${escapeHtml(colA)}" ` +
+        `title="この差異を確認済み・問題なしとして登録">既知にする</button>`
+      : "";
     return `<tr class="${cls}"><td>${mark}</td><td>${escapeHtml(label)}</td>` +
-      `<td>${escapeHtml(va)}</td><td>${escapeHtml(vb)}</td></tr>`;
+      `<td>${escapeHtml(va)}</td><td>${escapeHtml(vb)}</td><td>${knownBtn}</td></tr>`;
   }).join("");
   const nValues = d.key_flags.filter(f => !f).length;
   const summary = r.status === "same" ? `全${nValues}項目一致`
     : r.status === "changed" ? `${nValues - r.cell_diffs.length}/${nValues}項目一致(✖が相違)`
     : r.status === "only_a" ? "比較ファイル(B)に存在しません(未登録)"
     : "基準ファイル(A)に存在しません";
+  const missingKnownBtn = (r.status === "only_a" || r.status === "only_b") && !r.known
+    ? `<button id="known-row-btn" title="このレコードの欠落を確認済みとして容認する">この欠落を既知にする</button>`
+    : "";
   const dlg = $("#dialog");
   dlg.innerHTML = `<h2>レコード照合詳細 — キー: ${escapeHtml(r.key.join(" / "))}</h2>
-    <p style="margin:8px 12px"><b>${STATUS_JA[r.status]}</b>: ${summary}</p>
+    <p style="margin:8px 12px"><b>${STATUS_JA[r.status]}${r.known ? "(既知)" : ""}</b>: ${summary}</p>
     <div style="margin:0 12px; max-height:60vh; overflow:auto">
-    <table><thead><tr><th></th><th>項目</th><th>基準 (A)</th><th>比較 (B)</th></tr></thead>
+    <table><thead><tr><th></th><th>項目</th><th>基準 (A)</th><th>比較 (B)</th><th></th></tr></thead>
     <tbody>${rowsHtml}</tbody></table></div>
-    <div class="toolbar"><button data-cancel class="primary">閉じる</button></div>`;
+    <div class="toolbar">${missingKnownBtn}<button data-cancel class="primary">閉じる</button></div>`;
   dlg.querySelector("[data-cancel]").onclick = () => dlg.close();
+  dlg.querySelectorAll(".known-cell-btn").forEach(b => b.onclick = () => {
+    const cd = r.cell_diffs.find(x => x.col_a === b.dataset.col);
+    if (cd) registerKnown({ type: "cell", key: [...r.key], col_a: cd.col_a,
+                            value_a: cd.value_a, value_b: cd.value_b });
+  });
+  const rowBtn = dlg.querySelector("#known-row-btn");
+  if (rowBtn) rowBtn.onclick = () =>
+    registerKnown({ type: "row", key: [...r.key], status: r.status });
   dlg.showModal();
 }
 

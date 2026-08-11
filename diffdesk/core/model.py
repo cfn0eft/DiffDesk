@@ -222,6 +222,8 @@ class RowDiff:
     row_a: list[str] | None  # マッピング列に射影したAの元の値(A列順)
     row_b: list[str] | None
     cell_diffs: list[CellDiff] = field(default_factory=list)
+    known: bool = False  # 既知差分として容認済み(欠落レコード or 全セル差分が既知)
+    known_diffs: list[CellDiff] = field(default_factory=list)  # 既知扱いのセル差分
 
     def to_dict(self) -> dict:
         return {
@@ -230,6 +232,8 @@ class RowDiff:
             "row_a": self.row_a,
             "row_b": self.row_b,
             "cell_diffs": [c.to_dict() for c in self.cell_diffs],
+            "known": self.known,
+            "known_diffs": [c.to_dict() for c in self.known_diffs],
         }
 
 

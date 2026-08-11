@@ -111,6 +111,7 @@
       <button id="btn-profile-delete" class="danger">削除</button>
       <button id="btn-mapping-import" title="マッピング定義JSONファイルを読み込む">JSONファイル読込</button>
       <button id="btn-mapping-export" title="現在のマッピングをJSONファイルとして保存">JSON書出</button>
+      <button id="btn-dict-learn" title="現在の列の対応をユーザー辞書に登録し、次回から自動対応付けで最優先します">対応を辞書に学習</button>
       <input type="file" id="mapping-file-input" accept=".json,application/json" hidden>
     </div>
     <table class="mapping-table" id="mapping-table">
@@ -137,6 +138,14 @@
       </div>
     </div>
   </div>
+
+  <details class="card sub">
+    <summary>ユーザー辞書(自動対応付けに学習させた列の対応)</summary>
+    <div class="toolbar">
+      <button id="dict-refresh" class="mini">一覧を更新</button>
+    </div>
+    <div id="dict-list"></div>
+  </details>
 
   <details class="card sub">
     <summary>キーなし あいまい突合(共通キーがない2ファイルを類似度で紐づけ)</summary>
@@ -177,9 +186,13 @@
       </div>
     </div>
     <div id="summary-cards" class="cards"></div>
+    <div id="columns-summary"></div>
     <div id="diff-warnings"></div>
     <div class="card">
       <div class="toolbar">
+        <span>形式:</span>
+        <button id="view-merged" class="viewmode active" title="AとBを1行にまとめ、変更セルは 旧→新 で表示">統合</button>
+        <button id="view-split" class="viewmode" title="左=基準(A)、右=比較(B)をレコード対で並べて表示">左右分割</button>
         <span>表示:</span>
         <button class="statusfilter active" data-status="">全て</button>
         <button class="statusfilter" data-status="only_a">Aのみ</button>
@@ -187,6 +200,8 @@
         <button class="statusfilter" data-status="changed">変更</button>
         <button class="statusfilter" data-status="same">一致</button>
         <span class="spacer"></span>
+        <button id="jump-prev" title="前の要確認行へ(pキー)">◀ 差異</button>
+        <button id="jump-next" title="次の要確認行へ(nキー)">差異 ▶</button>
         <span id="diff-page-info"></span>
         <button id="diff-prev">前へ</button>
         <button id="diff-next">次へ</button>
@@ -195,6 +210,23 @@
       <p class="hint">変更セルは「A側の値 → B側の値」(マージで採用する側をクリックで選択、既定はA)。<b>行をクリックすると全項目の照合詳細</b>を表示します。</p>
     </div>
     <div id="diff-statusbar" class="statusbar"></div>
+    <details class="card sub">
+      <summary>既知差分の管理(「確認済み・問題なし」として登録した差異)</summary>
+      <p class="hint">照合結果の行をクリック → 詳細画面の「既知にする」で登録できます。登録した差異は以後の照合で問題に数えません。</p>
+      <div class="toolbar">
+        <button id="known-refresh" class="mini">一覧を更新</button>
+        <button id="known-clear-all" class="danger mini">全て削除</button>
+      </div>
+      <div id="known-list"></div>
+    </details>
+    <details class="card sub">
+      <summary>照合履歴(実行ごとの推移)</summary>
+      <div class="toolbar">
+        <button id="history-refresh" class="mini">更新</button>
+        <button id="history-clear" class="danger mini">履歴を削除</button>
+      </div>
+      <div id="history-list"></div>
+    </details>
     <div class="card">
       <h2>出力</h2>
       <div class="toolbar wrap">

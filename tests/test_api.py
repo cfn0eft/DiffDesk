@@ -379,6 +379,47 @@ class TestV060Features:
         assert rows[0][1] == "合格" and rows[1][1] == "不合格"
 
 
+class TestV070Features:
+    def test_known_diff_flow(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        # 変更セル(0002のメール)を既知に登録
+        r = client.post("/api/known-diffs", json={"entry": {
+            "type": "cell", "key": ["0002"], "col_a": "メール",
+            "value_a": "hanako@example.com", "value_b": "hanako-new@example.com"}})
+        assert r.status_code == 200
+        # rowsに反映(0002はsame+known_diffsになる)
+        rows = client.get(f"/api/diff/{diff_id}/rows").json()["rows"]
+        r2 = next(x for x in rows if x["key"] == ["0002"])
+        assert r2["status"] == "same" and len(r2["known_diffs"]) == 1
+        # 検証にも反映
+        v = client.get(f"/api/diff/{diff_id}/verify").json()
+        assert v["changed"] == 1 and v["known_cells"] == 1
+        # 列サマリー(メールの差異が消えて部署のみ)
+        cs = client.get(f"/api/diff/{diff_id}/columns-summary").json()["columns"]
+        assert cs == [{"column": "部署", "count": 1}]
+        # 管理APIで削除
+        client.delete("/api/known-diffs")
+        v = client.get(f"/api/diff/{diff_id}/verify").json()
+        assert v["changed"] == 2
+
+    def test_history_recorded(self, client):
+        TestDiffFlow().run_diff(client)
+        h = client.get("/api/history").json()["history"]
+        assert len(h) == 1 and h[0]["name_a"] == "master.csv"
+        client.delete("/api/history")
+        assert client.get("/api/history").json()["history"] == []
+
+    def test_user_dict_automap(self, client):
+        fa = upload(client, "a.csv", "検体番号\nS-1\n".encode("utf-8"))["file_id"]
+        fb = upload(client, "b.csv", "SampleNo__c,Other__c\nS-1,S-1\n".encode("utf-8"))["file_id"]
+        client.post("/api/user-dict",
+                    json={"pairs": [{"col_a": "検体番号", "col_b": "SampleNo__c"}]})
+        r = client.post("/api/automap", json={"file_a": fa, "file_b": fb}).json()
+        assert r["by_dict"] == 1
+        by = {p["col_a"]: p["col_b"] for p in r["pairs"]}
+        assert by["検体番号"] == "SampleNo__c"
+
+
 class TestProfiles:
     def test_save_load_list_delete(self, client):
         profile = {

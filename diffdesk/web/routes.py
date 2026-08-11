@@ -10,7 +10,19 @@ from ..core import (
     ANONYMIZE_MODES,
     CLEAN_OPS,
     COLUMN_OPS,
+    add_known_diff,
+    add_user_pairs,
     analyze_errors,
+    append_history,
+    apply_known_diffs,
+    clear_history,
+    clear_known_diffs,
+    column_diff_summary,
+    load_history,
+    load_known_diffs,
+    load_user_dict,
+    remove_known_diff,
+    remove_user_pair,
     anonymize_columns,
     apply_value_map,
     build_html_report,
@@ -373,15 +385,22 @@ def enrich_file(file_id: str, req: sc.EnrichRequest):
 
 # ---------------------------------------------------------------- mapping/diff
 
+def _diff_with_known(diff_id: str):
+    """保存済み差分に既知差分リストを適用して返す(元は変更しない)。"""
+    return apply_known_diffs(store.get_diff(diff_id), load_known_diffs())
+
+
 @router.post("/automap")
 def automap(req: sc.AutomapRequest):
     a = store.get_table(req.file_a)
     b = store.get_table(req.file_b)
-    suggestions = suggest_mapping(a, b)
+    user_pairs = [(e["col_a"], e["col_b"]) for e in load_user_dict()]
+    suggestions = suggest_mapping(a, b, user_pairs=user_pairs)
     return {
         "pairs": [s.to_dict() for s in suggestions],
         "by_name": sum(1 for s in suggestions if "name" in s.method),
         "by_value": sum(1 for s in suggestions if "value" in s.method),
+        "by_dict": sum(1 for s in suggestions if s.method == "辞書"),
     }
 
 
@@ -394,6 +413,17 @@ def run_diff(req: sc.DiffRequest):
     row_filter = RowFilter.from_dict(req.row_filter)
     result = diff_tables(a, b, mapping, options, row_filter)
     diff_id = store.add_diff(result)
+    # 照合履歴に記録(既知差分適用後のサマリーで)
+    known_applied = apply_known_diffs(result, load_known_diffs())
+    v = build_verification(known_applied)
+    append_history({
+        "name_a": result.name_a, "name_b": result.name_b,
+        "rows_a": v.rows_a, "rows_b": v.rows_b,
+        "same": v.same, "changed": v.changed,
+        "only_a": v.only_a, "only_b": v.only_b,
+        "match_rate": round(v.to_dict()["match_rate"], 4),
+        "passed": v.passed,
+    })
     return {
         "diff_id": diff_id,
         "summary": result.summary,
@@ -407,7 +437,7 @@ def run_diff(req: sc.DiffRequest):
 
 @router.get("/diff/{diff_id}/rows")
 def diff_rows(diff_id: str, status: str = "", offset: int = 0, limit: int = 200):
-    result = store.get_diff(diff_id)
+    result = _diff_with_known(diff_id)
     statuses = set(status.split(",")) if status else None
     rows = [r for r in result.rows if statuses is None or r.status in statuses]
     limit = max(1, min(limit, 2000))
@@ -420,13 +450,13 @@ def diff_rows(diff_id: str, status: str = "", offset: int = 0, limit: int = 200)
 
 @router.get("/diff/{diff_id}/verify")
 def verify_diff(diff_id: str, only_b_is_error: bool = True):
-    result = store.get_diff(diff_id)
+    result = _diff_with_known(diff_id)
     return build_verification(result, only_b_is_error=only_b_is_error).to_dict()
 
 
 @router.post("/diff/{diff_id}/merge")
 def merge_diff(diff_id: str, req: sc.MergeRequest):
-    result = store.get_diff(diff_id)
+    result = _diff_with_known(diff_id)
     out = apply_merge(result, req.choices, include_only_b=req.include_only_b)
     entry = store.add_table_as_file("マージ結果.csv", out)
     return _file_info(entry, out)
@@ -444,7 +474,7 @@ def export_table(file_id: str, req: sc.ExportTableRequest):
 
 @router.post("/export/upsert/{diff_id}")
 def export_upsert(diff_id: str, req: sc.ExportUpsertRequest):
-    result = store.get_diff(diff_id)
+    result = _diff_with_known(diff_id)
     include = set()
     if req.include_insert:
         include.add("only_a")
@@ -458,7 +488,7 @@ def export_upsert(diff_id: str, req: sc.ExportUpsertRequest):
 
 @router.post("/export/delete/{diff_id}")
 def export_delete(diff_id: str, req: sc.ExportDeleteRequest):
-    result = store.get_diff(diff_id)
+    result = _diff_with_known(diff_id)
     table = build_delete_table(result, id_col_b=req.id_col_b)
     raw = write_csv(table, encoding=req.encoding)
     return _download(raw, "delete.csv", "text/csv")
@@ -466,13 +496,13 @@ def export_delete(diff_id: str, req: sc.ExportDeleteRequest):
 
 @router.get("/export/sdl/{diff_id}")
 def export_sdl(diff_id: str):
-    result = store.get_diff(diff_id)
+    result = _diff_with_known(diff_id)
     return _download(build_sdl(result).encode("utf-8"), "mapping.sdl", "text/plain")
 
 
 @router.post("/export/report/{diff_id}")
 def export_report(diff_id: str, req: sc.ExportReportRequest):
-    result = store.get_diff(diff_id)
+    result = _diff_with_known(diff_id)
     if req.format == "xlsx":
         return _download(build_xlsx_report(result), "差分レポート.xlsx",
                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -483,7 +513,7 @@ def export_report(diff_id: str, req: sc.ExportReportRequest):
 
 @router.post("/export/verify/{diff_id}")
 def export_verify(diff_id: str, req: sc.ExportVerifyRequest):
-    result = store.get_diff(diff_id)
+    result = _diff_with_known(diff_id)
     if req.format == "xlsx":
         return _download(
             build_verification_xlsx(result, only_b_is_error=req.only_b_is_error),
@@ -497,7 +527,7 @@ def export_verify(diff_id: str, req: sc.ExportVerifyRequest):
 @router.post("/export/restore/{diff_id}")
 def export_restore(diff_id: str, req: sc.ExportDeleteRequest):
     """投入前のSF値による復元用update CSV(ロールバックキット)。"""
-    result = store.get_diff(diff_id)
+    result = _diff_with_known(diff_id)
     table = build_restore_table(result)
     raw = write_csv(table, encoding=req.encoding)
     return _download(raw, "復元用_投入前のSF値.csv", "text/csv")
@@ -516,7 +546,7 @@ def export_undo_delete(file_id: str, req: sc.ExportDeleteRequest):
 
 @router.post("/export/html/{diff_id}")
 def export_html(diff_id: str, req: sc.ExportHtmlRequest):
-    result = store.get_diff(diff_id)
+    result = _diff_with_known(diff_id)
     html_text = build_html_report(result, only_b_is_error=req.only_b_is_error)
     return _download(html_text.encode("utf-8"), "差分レポート.html", "text/html")
 
@@ -658,6 +688,62 @@ def apply_file_recipe(file_id: str, req: sc.RecipeApplyRequest):
     entry = store.get_file(file_id)
     entry.ops.extend(ops)
     return {"logs": logs, "preview": _preview(table)}
+
+
+# ---------------------------------------------------------------- 既知差分・履歴・辞書
+@router.get("/known-diffs")
+def get_known_diffs():
+    return {"entries": load_known_diffs()}
+
+
+@router.post("/known-diffs")
+def post_known_diff(req: sc.KnownDiffRequest):
+    entries = add_known_diff(req.entry)
+    return {"ok": True, "count": len(entries)}
+
+
+@router.delete("/known-diffs/{index}")
+def delete_known_diff(index: int):
+    return {"entries": remove_known_diff(index)}
+
+
+@router.delete("/known-diffs")
+def delete_all_known_diffs():
+    clear_known_diffs()
+    return {"ok": True}
+
+
+@router.get("/diff/{diff_id}/columns-summary")
+def diff_columns_summary(diff_id: str):
+    result = _diff_with_known(diff_id)
+    return {"columns": column_diff_summary(result)}
+
+
+@router.get("/history")
+def get_history(limit: int = 50):
+    return {"history": load_history(limit=limit)}
+
+
+@router.delete("/history")
+def delete_history():
+    clear_history()
+    return {"ok": True}
+
+
+@router.get("/user-dict")
+def get_user_dict():
+    return {"entries": load_user_dict()}
+
+
+@router.post("/user-dict")
+def post_user_dict(req: sc.UserDictRequest):
+    entries = add_user_pairs(req.pairs)
+    return {"ok": True, "count": len(entries)}
+
+
+@router.delete("/user-dict/{index}")
+def delete_user_dict_entry(index: int):
+    return {"entries": remove_user_pair(index)}
 
 
 # ---------------------------------------------------------------- profiles

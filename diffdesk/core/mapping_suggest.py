@@ -156,14 +156,20 @@ def _value_sets(table: Table) -> tuple[dict[str, set[str]], dict[str, bool]]:
     return sets, uniqueish
 
 
-def suggest_mapping(table_a: Table, table_b: Table) -> list[MappingSuggestion]:
+def suggest_mapping(table_a: Table, table_b: Table,
+                    user_pairs: list[tuple[str, str]] | None = None
+                    ) -> list[MappingSuggestion]:
     sets_a, unique_a = _value_sets(table_a)
     sets_b, unique_b = _value_sets(table_b)
+    user_set = {(a, b) for a, b in (user_pairs or [])}
 
     candidates: list[tuple[float, str, str, str]] = []  # (score, a, b, method)
     for a in table_a.columns:
         sa = sets_a[a]
         for b in table_b.columns:
+            if (a, b) in user_set:  # ユーザー辞書の対応は最優先
+                candidates.append((1.0, a, b, "辞書"))
+                continue
             ns = _name_score(a, b)
             sb = sets_b[b]
             vs = 0.0

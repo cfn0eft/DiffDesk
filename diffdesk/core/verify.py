@@ -25,11 +25,13 @@ class VerificationResult:
     matched: int             # キーが一致した件数
     same: int
     changed: int
-    only_a: int              # 未投入
-    only_b: int              # 想定外(Bのみ)
+    only_a: int              # 未投入(既知除く)
+    only_b: int              # 想定外(Bのみ、既知除く)
     unmatchable_a: int       # A側のキー重複+キー空
     unmatchable_b: int
     only_b_is_error: bool
+    known_rows: int = 0      # 既知として容認された欠落レコード数
+    known_cells: int = 0     # 既知として容認されたセル差分数
     problems: list[str] = field(default_factory=list)  # 人向けの指摘文
 
     def to_dict(self) -> dict:
@@ -40,6 +42,7 @@ class VerificationResult:
             "only_a": self.only_a, "only_b": self.only_b,
             "unmatchable_a": self.unmatchable_a, "unmatchable_b": self.unmatchable_b,
             "only_b_is_error": self.only_b_is_error,
+            "known_rows": self.known_rows, "known_cells": self.known_cells,
             "problems": self.problems,
             "match_rate": (self.same / self.rows_a) if self.rows_a else 0.0,
         }
@@ -47,10 +50,27 @@ class VerificationResult:
 
 def build_verification(diff: DiffResult, *, only_b_is_error: bool = True) -> VerificationResult:
     s = diff.summary
-    only_a, only_b, changed, same = s["only_a"], s["only_b"], s["changed"], s["same"]
+    only_a = only_b = changed = same = 0
+    known_rows = known_cells = 0
+    for rd in diff.rows:
+        known_cells += len(rd.known_diffs)
+        if rd.status == "only_a":
+            if rd.known:
+                known_rows += 1
+            else:
+                only_a += 1
+        elif rd.status == "only_b":
+            if rd.known:
+                known_rows += 1
+            else:
+                only_b += 1
+        elif rd.status == "changed":
+            changed += 1
+        else:
+            same += 1
     matched = same + changed
-    rows_a = only_a + matched
-    rows_b = only_b + matched
+    rows_a = s["only_a"] + matched  # 既知含む物理件数
+    rows_b = s["only_b"] + matched
     unmatchable_a = s["duplicates_a"] + s["empty_key_a"]
     unmatchable_b = s["duplicates_b"] + s["empty_key_b"]
 
@@ -65,6 +85,13 @@ def build_verification(diff: DiffResult, *, only_b_is_error: bool = True) -> Ver
             problems.append(msg + "新規オルグへの投入であれば想定外です。")
         else:
             problems.append("(許容) " + msg + "既存レコードとして許容されています。")
+    if known_rows or known_cells:
+        detail = []
+        if known_rows:
+            detail.append(f"欠落{known_rows}件")
+        if known_cells:
+            detail.append(f"セル差分{known_cells}箇所")
+        problems.append(f"(既知) 登録済みの既知差分({'、'.join(detail)})は問題に含めていません。")
     if unmatchable_a:
         problems.append(f"A側にキー重複・キー空が {unmatchable_a} 件あり、照合できていません。")
     if unmatchable_b:
@@ -76,7 +103,8 @@ def build_verification(diff: DiffResult, *, only_b_is_error: bool = True) -> Ver
         passed=passed, rows_a=rows_a, rows_b=rows_b, matched=matched,
         same=same, changed=changed, only_a=only_a, only_b=only_b,
         unmatchable_a=unmatchable_a, unmatchable_b=unmatchable_b,
-        only_b_is_error=only_b_is_error, problems=problems,
+        only_b_is_error=only_b_is_error,
+        known_rows=known_rows, known_cells=known_cells, problems=problems,
     )
 
 
