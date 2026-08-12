@@ -211,10 +211,20 @@ class ExportVerifyRequest(BaseModel):
 
 class JunctionVerifyRequest(BaseModel):
     file_source: str   # 移行元データのfile_id
-    file_a: str        # 親A抽出のfile_id
-    file_b: str        # 親B抽出のfile_id
     file_j: str        # 中間抽出のfile_id
+    file_a: str = ""   # 親A抽出のfile_id(任意)
+    file_b: str = ""   # 親B抽出のfile_id(任意)
     config: dict       # JunctionConfig.from_dict に渡す設定
+
+
+class InferTemplateRequest(BaseModel):
+    file_source: str
+    file_j: str
+    a_source_col: str
+    b_source_col: str
+    j_key_col: str
+    b_regex_pattern: str = ""
+    b_regex_replacement: str = ""
 
 
 class JunctionExportRequest(JunctionVerifyRequest):

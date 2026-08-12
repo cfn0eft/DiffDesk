@@ -80,7 +80,7 @@ class TestOrphanAnalysis:
         causes = r["orphans"]["causes"]
         # REL-C001-製品X → 親A欠落 / REL-C001-製品Y → 両方欠落 / REL-C002-製品X → 親OK
         assert causes == {"missing_a": 1, "missing_b": 0,
-                          "missing_both": 1, "parents_ok": 1}
+                          "missing_both": 1, "parents_ok": 1, "unknown": 0}
         assert r["orphans"]["total"] == 3
         assert r["orphans"]["bottleneck"] in ("missing_a", "missing_both", "parents_ok")
         kinds = {s["cause"] for s in r["orphans"]["samples"]}

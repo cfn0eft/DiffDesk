@@ -57,9 +57,8 @@ function fillColumns(fileSel) {
 }
 
 function jxRequest() {
-  const ids = ["jx-file-source", "jx-file-a", "jx-file-b", "jx-file-j"];
-  if (ids.some(id => !$("#" + id).value)) {
-    toast("4つのファイル(移行元・親A・親B・中間)をすべて選択してください。", true);
+  if (!$("#jx-file-source").value || !$("#jx-file-j").value) {
+    toast("移行元データと中間抽出の2つのファイルを選択してください。", true);
     return null;
   }
   return {
@@ -88,9 +87,64 @@ const CAUSE_JA = {
   missing_b: "親Bの外部IDが存在しない",
   missing_both: "親A・親Bの両方が存在しない",
   parents_ok: "両親は存在(中間だけ未取込)",
+  unknown: "原因不明(詳細設定で親の抽出ファイルを選ぶと切り分けできます)",
 };
 const CAUSE_CLS = { missing_a: "jx-c-a", missing_b: "jx-c-b",
-                    missing_both: "jx-c-both", parents_ok: "jx-c-j" };
+                    missing_both: "jx-c-both", parents_ok: "jx-c-j",
+                    unknown: "jx-c-u" };
+
+// ---------------------------------------------------------------- 関係ビュー
+let relState = { groups: [], page: 0, perPage: 50 };
+
+function relFiltered() {
+  const onlyNg = $("#jx-rel-problems").checked;
+  const q = $("#jx-rel-search").value.trim().toLowerCase();
+  return relState.groups.filter(g => {
+    if (onlyNg && g.ng === 0) return false;
+    if (!q) return true;
+    if (g.a.toLowerCase().includes(q)) return true;
+    return g.items.some(i => i.b.toLowerCase().includes(q)
+                          || i.key.toLowerCase().includes(q));
+  });
+}
+
+function renderRelations() {
+  const list = relFiltered();
+  const per = relState.perPage;
+  const pages = Math.max(1, Math.ceil(list.length / per));
+  relState.page = Math.min(relState.page, pages - 1);
+  const slice = list.slice(relState.page * per, (relState.page + 1) * per);
+  $("#jx-rel-page-info").textContent =
+    list.length ? `${relState.page * per + 1}–${relState.page * per + slice.length} / ${list.length}親` : "0件";
+  if (!slice.length) {
+    $("#jx-relations").innerHTML =
+      `<p class="hint">${relState.groups.length
+        ? "条件に合う親がありません(「問題のある親だけ表示」を外すと全件出ます)。"
+        : "関係がありません。"}</p>`;
+    return;
+  }
+  $("#jx-relations").innerHTML = slice.map(g => {
+    const chips = g.items.map(i => {
+      if (i.status === "ok") {
+        return `<span class="relchip rel-ok" title="取込済: ${escapeHtml(i.key)}">✔ ${escapeHtml(i.b)}</span>`;
+      }
+      if (i.status === "extra") {
+        return `<span class="relchip rel-extra" title="移行元に無い実績: ${escapeHtml(i.key)}">? ${escapeHtml(i.b)}</span>`;
+      }
+      return `<span class="relchip rel-missing" title="未取込: ${escapeHtml(i.key)} — ${CAUSE_JA[i.cause] || i.cause}">✖ ${escapeHtml(i.b)}</span>`;
+    }).join(" ");
+    const stat = g.ng
+      ? `<span class="ng-mark">✖ ${g.ok}/${g.items.length} 取込済</span>`
+      : `<span class="ok-mark">✔ 全${g.items.length}件 取込済</span>`;
+    return `<div class="relgroup"><div class="relhead"><b>${escapeHtml(g.a)}</b> ${stat}</div>` +
+      `<div class="relbody">${chips}</div></div>`;
+  }).join("");
+}
+
+$("#jx-rel-problems").onchange = () => { relState.page = 0; renderRelations(); };
+$("#jx-rel-search").oninput = () => { relState.page = 0; renderRelations(); };
+$("#jx-rel-prev").onclick = () => { relState.page = Math.max(0, relState.page - 1); renderRelations(); };
+$("#jx-rel-next").onclick = () => { relState.page += 1; renderRelations(); };
 
 function macroRow(step, extraNote = "") {
   const mark = step.passed
@@ -116,17 +170,41 @@ function renderJxResult(r) {
   const banner = $("#jx-banner");
   banner.className = r.passed ? "ok" : "ng";
   banner.textContent = r.passed
-    ? "✔ 移行OK — 親A・親B・中間オブジェクトすべて期待どおりです"
-    : "✖ 要確認 — 期待値と実績に差があります(下の内訳と孤立分析を確認)";
+    ? "✔ 移行OK — 期待どおり取り込まれています"
+    : "✖ 要確認 — 期待値と実績に差があります(関係ビューと下の内訳を確認)";
+
+  // 関係ビュー
+  relState = { ...relState, groups: r.relations?.groups ?? [], page: 0 };
+  const rel = r.relations;
+  renderRelations();
+  if (rel && (rel.truncated || rel.unparsed_extra_count)) {
+    const notes = [];
+    if (rel.truncated) notes.push(`親が多いため先頭${rel.groups.length}件のみ表示(全${rel.total_groups}件)`);
+    if (rel.unparsed_extra_count) {
+      notes.push(`複合キー形式に合わない実績キー${rel.unparsed_extra_count}件: ` +
+        rel.unparsed_extra.slice(0, 5).map(escapeHtml).join(", "));
+    }
+    $("#jx-relations").insertAdjacentHTML("beforebegin",
+      `<p class="hint jx-rel-note">${notes.join(" / ")}</p>`);
+  }
+  $$(".jx-rel-note").forEach((el, i, all) => { if (i < all.length - 1) el.remove(); });
 
   const j = r.junction;
   const skipNote =
     `スキップ: 必須列空白${j.skipped_required}件・キー成分空白${j.skipped_empty_pair}件`;
+  const skippedParents = [];
+  if (!r.parent_a) skippedParents.push("親A");
+  if (!r.parent_b) skippedParents.push("親B");
   $("#jx-macro").innerHTML =
     `<table><thead><tr><th>判定</th><th>ステップ</th><th>期待値(ユニーク)</th>` +
     `<th>実績件数</th><th>差</th><th>内訳</th></tr></thead><tbody>` +
-    macroRow(r.parent_a) + macroRow(r.parent_b) + macroRow(j, skipNote) +
+    (r.parent_a ? macroRow(r.parent_a) : "") +
+    (r.parent_b ? macroRow(r.parent_b) : "") +
+    macroRow(j, skipNote) +
     `</tbody></table>` +
+    (skippedParents.length
+      ? `<p class="hint">${skippedParents.join("・")}の件数検証はスキップ` +
+        `(詳細設定で抽出ファイルを選ぶと有効になります)</p>` : "") +
     (r.ref_errors
       ? `<p class="hint">参照整合: 親A参照エラー <b>${r.ref_errors.bad_ref_a}</b>件 / ` +
         `親B参照エラー <b>${r.ref_errors.bad_ref_b}</b>件</p>`
@@ -136,7 +214,7 @@ function renderJxResult(r) {
   $("#jx-orphan-card").hidden = !o.total;
   $("#jx-export").hidden = !o.total;
   if (o.total) {
-    const order = ["missing_a", "missing_b", "missing_both", "parents_ok"];
+    const order = ["missing_a", "missing_b", "missing_both", "parents_ok", "unknown"];
     const bar = order.map(c => o.causes[c]
       ? `<div class="${CAUSE_CLS[c]}" style="width:${(o.causes[c] / o.total) * 100}%" ` +
         `title="${CAUSE_JA[c]}: ${o.causes[c]}件"></div>` : "").join("");
@@ -216,6 +294,34 @@ $("#jx-spec-input").onchange = async () => {
       (r.warnings.length ? " 注意: " + r.warnings.join(" / ") : ""),
       r.warnings.length > 0);
   } catch (e) { toast(`定義JSONの読み込みに失敗: ${e.message}`, true); }
+};
+
+// 複合キー形式の自動推定(実例から)
+$("#jx-infer").onclick = async () => {
+  const src = $("#jx-file-source").value;
+  const jf = $("#jx-file-j").value;
+  if (!src || !jf) return toast("移行元データと中間抽出を先に選択してください。", true);
+  if (!$("#jx-a-source").value || !$("#jx-b-source").value || !$("#jx-j-key").value) {
+    return toast("親A・親Bの列と中間キーの列を先に選択してください。", true);
+  }
+  try {
+    const r = await postJson("/api/junction-verify/infer-template", {
+      file_source: src, file_j: jf,
+      a_source_col: $("#jx-a-source").value,
+      b_source_col: $("#jx-b-source").value,
+      j_key_col: $("#jx-j-key").value,
+      b_regex_pattern: $("#jx-b-pattern").value,
+      b_regex_replacement: $("#jx-b-repl").value,
+    });
+    if (!r.template) {
+      $("#jx-infer-info").textContent = "推定できませんでした(値がキーに含まれない形式かもしれません)";
+      return toast("キー形式を推定できませんでした。手で入力してください。", true);
+    }
+    $("#jx-template").value = r.template;
+    const pct = Math.round(r.coverage * 100);
+    $("#jx-infer-info").textContent = `推定: ${r.template}(サンプル${r.checked}組中${pct}%が実例と一致)`;
+    toast(`複合キーの形式を「${r.template}」と推定しました(一致率${pct}%)。`);
+  } catch (e) { toast(e.message, true); }
 };
 
 $("#jx-refresh").onclick = refreshJxFiles;

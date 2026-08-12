@@ -26,18 +26,41 @@ function setSideInfo(side, info) {
   if (side === "a") state.fileA = info; else state.fileB = info;
 }
 
-async function uploadFile(side, file) {
-  const form = new FormData();
-  form.append("file", file);
+let poolSettingsId = null;  // 読込設定パネルを開いているfile_id
+
+// ファイルをプールへ追加(複数可)。空いていれば最初の2件を自動でA/Bに割当。
+async function uploadToPool(files) {
+  for (const file of files) {
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const info = await apiJson("/api/files", { method: "POST", body: form });
+      if (!state.fileA) {
+        setSideInfo("a", info);
+      } else if (!state.fileB && state.fileA.file_id !== info.file_id) {
+        setSideInfo("b", info);
+      }
+      toast(`${info.filename} を読み込みました (${info.preview.total_rows}行)`);
+    } catch (e) { toast(`${file.name}: ${e.message}`, true); }
+  }
+  renderAssignments();
+  refreshFileList();
+  rebuildMappingSelects();
+  updateNextSteps();
+}
+
+// 役割(基準A / 比較B)の割当
+async function assignRole(fileId, side) {
   try {
-    const info = await apiJson("/api/files", { method: "POST", body: form });
+    const info = await apiJson(`/api/files/${fileId}/info`);
+    const other = side === "a" ? "b" : "a";
+    if (sideInfo(other)?.file_id === fileId) setSideInfo(other, null);
     setSideInfo(side, info);
-    renderParsePanel(side);
-    renderPreview(side);
+    renderAssignments();
     refreshFileList();
     rebuildMappingSelects();
     updateNextSteps();
-    toast(`${info.filename} を読み込みました (${info.preview.total_rows}行)`);
+    toast(`${info.filename} を${side === "a" ? "基準(A)" : "比較(B)"}にしました`);
   } catch (e) { toast(e.message, true); }
 }
 
@@ -45,40 +68,59 @@ function updateNextSteps() {
   $("#next-steps").hidden = !(state.fileA && state.fileB);
 }
 
-function renderParsePanel(side) {
-  const info = sideInfo(side);
-  const panel = $(`.parse-panel[data-side="${side}"]`);
-  if (!info) { panel.hidden = true; return; }
-  panel.hidden = false;
-  const p = info.parse_params || {};
-  const encSel = ENCODINGS.map(([v, l]) =>
-    `<option value="${v}" ${v === (p.encoding || "") ? "selected" : ""}>${l}</option>`).join("");
-  const delimSel = DELIMITERS.map(([v, l]) =>
-    `<option value="${escapeHtml(v)}" ${v === (p.delimiter || "") ? "selected" : ""}>${l}</option>`).join("");
-  const sheets = info.sheets
-    ? `<label>シート: <select data-role="sheet">${info.sheets.map(s =>
-        `<option ${s === (p.sheet || info.preview.sheet) ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}</select></label>`
-    : "";
-  const detected = info.detected_encoding
-    ? `<span class="badge">判定: ${info.detected_encoding}${info.confidence < 0.9 ? " (要確認)" : ""}</span>`
-    : "";
-  panel.innerHTML = `
-    <div class="toolbar">
-      <strong>${escapeHtml(info.filename)}</strong> ${detected}
-    </div>
-    <div class="toolbar">
-      ${info.is_excel ? sheets : `
-        <label>エンコーディング: <select data-role="encoding">${encSel}</select></label>
-        <label>区切り: <select data-role="delimiter">${delimSel}</select></label>`}
-      <label>ヘッダー行: <input data-role="header_row" type="number" min="1" value="${p.header_row || 1}" style="width:60px"></label>
-      <button data-role="reparse">再読込</button>
-    </div>`;
-  panel.querySelector('[data-role="reparse"]').onclick = () => reparse(side);
+function renderAssignments() {
+  const a = state.fileA, b = state.fileB;
+  $("#assign-previews").hidden = !a && !b;
+  $("#assign-a-name").textContent = a
+    ? `${a.filename} (${a.preview.total_rows}行)` : "未選択(一覧の「基準A」を選択)";
+  $("#assign-b-name").textContent = b
+    ? `${b.filename} (${b.preview.total_rows}行)` : "未選択(一覧の「比較B」を選択)";
+  renderPreview("a");
+  renderPreview("b");
 }
 
-async function reparse(side) {
-  const info = sideInfo(side);
-  const panel = $(`.parse-panel[data-side="${side}"]`);
+function renderParsePanel() {
+  // プールで「読込設定」を押したファイルの設定パネル
+  const card = $("#pool-settings-card");
+  if (!poolSettingsId) { card.hidden = true; return; }
+  apiJson(`/api/files/${poolSettingsId}/info`).then(info => {
+    card.hidden = false;
+    $("#pool-settings-name").textContent = info.filename;
+    const p = info.parse_params || {};
+    const encSel = ENCODINGS.map(([v, l]) =>
+      `<option value="${v}" ${v === (p.encoding || "") ? "selected" : ""}>${l}</option>`).join("");
+    const delimSel = DELIMITERS.map(([v, l]) =>
+      `<option value="${escapeHtml(v)}" ${v === (p.delimiter || "") ? "selected" : ""}>${l}</option>`).join("");
+    const sheets = info.sheets
+      ? `<label>シート: <select data-role="sheet">${info.sheets.map(s =>
+          `<option ${s === (p.sheet || info.preview.sheet) ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}</select></label>`
+      : "";
+    const detected = info.detected_encoding
+      ? `<span class="badge">判定: ${info.detected_encoding}${info.confidence < 0.9 ? " (要確認)" : ""}</span>`
+      : "";
+    const panel = $("#pool-parse-panel");
+    panel.innerHTML = `
+      <div class="toolbar">
+        ${detected}
+        ${info.is_excel ? sheets : `
+          <label>エンコーディング: <select data-role="encoding">${encSel}</select></label>
+          <label>区切り: <select data-role="delimiter">${delimSel}</select></label>`}
+        <label>ヘッダー行: <input data-role="header_row" type="number" min="1" value="${p.header_row || 1}" style="width:60px"></label>
+        <button data-role="reparse" class="primary">再読込</button>
+        <button data-role="close-settings">閉じる</button>
+      </div>`;
+    renderPreviewTable($("#pool-preview"), info.preview.columns,
+                       info.preview.rows, info.preview.total_rows);
+    panel.querySelector('[data-role="reparse"]').onclick = () => reparsePool(info);
+    panel.querySelector('[data-role="close-settings"]').onclick = () => {
+      poolSettingsId = null;
+      renderParsePanel();
+    };
+  }).catch(e => toast(e.message, true));
+}
+
+async function reparsePool(info) {
+  const panel = $("#pool-parse-panel");
   const get = role => panel.querySelector(`[data-role="${role}"]`);
   const body = { header_row: parseInt(get("header_row").value || "1", 10) };
   if (info.is_excel) {
@@ -89,9 +131,12 @@ async function reparse(side) {
   }
   try {
     const updated = await postJson(`/api/files/${info.file_id}/parse`, body);
-    setSideInfo(side, updated);
-    renderParsePanel(side);
-    renderPreview(side);
+    // A/Bに割当済みならその情報も更新
+    if (state.fileA?.file_id === updated.file_id) setSideInfo("a", updated);
+    if (state.fileB?.file_id === updated.file_id) setSideInfo("b", updated);
+    renderParsePanel();
+    renderAssignments();
+    refreshFileList();
     rebuildMappingSelects();
     toast("再読込しました");
   } catch (e) { toast(e.message, true); }
@@ -104,35 +149,44 @@ function renderPreview(side) {
   renderPreviewTable(el, info.preview.columns, info.preview.rows, info.preview.total_rows);
 }
 
-$$(".dropzone").forEach(zone => {
-  const side = zone.dataset.side;
+{
+  const zone = $("#pool-drop");
   zone.ondragover = e => { e.preventDefault(); zone.classList.add("dragover"); };
   zone.ondragleave = () => zone.classList.remove("dragover");
   zone.ondrop = e => {
     e.preventDefault();
     zone.classList.remove("dragover");
-    if (e.dataTransfer.files[0]) uploadFile(side, e.dataTransfer.files[0]);
+    if (e.dataTransfer.files.length) uploadToPool([...e.dataTransfer.files]);
   };
-});
-$$('input[type="file"][data-side]').forEach(input => {
-  input.onchange = () => {
-    if (input.files[0]) uploadFile(input.dataset.side, input.files[0]);
-    input.value = "";
+  $("#pool-input").onchange = () => {
+    if ($("#pool-input").files.length) uploadToPool([...$("#pool-input").files]);
+    $("#pool-input").value = "";
   };
-});
+}
 
 // ---------------------------------------------------------------- ファイル一覧・ユーティリティ
 export async function refreshFileList() {
   const { files } = await apiJson("/api/files");
-  const el = $("#file-list");
-  if (!files.length) { el.innerHTML = `<p class="hint">まだファイルがありません。</p>`; return; }
-  el.innerHTML = `<table><thead><tr><th></th><th>ファイル</th><th>行数</th><th>列数</th><th></th></tr></thead><tbody>` +
-    files.map(f => `<tr>
-      <td><input type="checkbox" class="file-check" value="${f.file_id}"></td>
-      <td>${escapeHtml(f.filename)} <span class="hint">${f.file_id}</span></td>
-      <td>${f.total_rows}</td><td>${f.columns.length}</td>
-      <td><button class="mini file-del" data-id="${f.file_id}">削除</button></td>
-    </tr>`).join("") + `</tbody></table>`;
+  const el = $("#pool-list");
+  if (!files.length) {
+    el.innerHTML = `<p class="hint">まだファイルがありません。上のエリアから読み込んでください。</p>`;
+  } else {
+    el.innerHTML = `<table><thead><tr><th title="ユーティリティの対象"></th><th>ファイル</th>` +
+      `<th>行数</th><th>列数</th><th>基準A</th><th>比較B</th><th></th><th></th></tr></thead><tbody>` +
+      files.map(f => {
+        const isA = state.fileA?.file_id === f.file_id;
+        const isB = state.fileB?.file_id === f.file_id;
+        return `<tr class="${isA ? "row-role-a" : ""} ${isB ? "row-role-b" : ""}">
+        <td><input type="checkbox" class="file-check" value="${f.file_id}"></td>
+        <td>${escapeHtml(f.filename)}${isA ? ' <span class="rolechip role-a">A</span>' : ""}${isB ? ' <span class="rolechip role-b">B</span>' : ""}</td>
+        <td>${f.total_rows}</td><td>${f.columns.length}</td>
+        <td style="text-align:center"><input type="radio" name="role-a" class="role-radio" data-side="a" data-id="${f.file_id}" ${isA ? "checked" : ""} title="このファイルを基準(A)にする"></td>
+        <td style="text-align:center"><input type="radio" name="role-b" class="role-radio" data-side="b" data-id="${f.file_id}" ${isB ? "checked" : ""} title="このファイルを比較(B)にする"></td>
+        <td><button class="mini file-settings" data-id="${f.file_id}">読込設定</button></td>
+        <td><button class="mini danger file-del" data-id="${f.file_id}">削除</button></td>
+      </tr>`;
+      }).join("") + `</tbody></table>`;
+  }
   // エラーファイル分析・許可値取得用のファイルセレクトも更新
   for (const selId of ["#err-file-select", "#val-allow-src-file", "#health-file-select"]) {
     const sel = $(selId);
@@ -142,10 +196,19 @@ export async function refreshFileList() {
       `<option value="${f.file_id}">${escapeHtml(f.filename)}</option>`).join("");
     if (files.some(f => f.file_id === cur)) sel.value = cur;
   }
+  el.querySelectorAll(".role-radio").forEach(r => r.onchange = () =>
+    assignRole(r.dataset.id, r.dataset.side));
+  el.querySelectorAll(".file-settings").forEach(b => b.onclick = () => {
+    poolSettingsId = b.dataset.id;
+    renderParsePanel();
+  });
   el.querySelectorAll(".file-del").forEach(b => b.onclick = async () => {
     await api(`/api/files/${b.dataset.id}`, { method: "DELETE" });
-    if (state.fileA?.file_id === b.dataset.id) { state.fileA = null; renderParsePanel("a"); renderPreview("a"); }
-    if (state.fileB?.file_id === b.dataset.id) { state.fileB = null; renderParsePanel("b"); renderPreview("b"); }
+    if (state.fileA?.file_id === b.dataset.id) state.fileA = null;
+    if (state.fileB?.file_id === b.dataset.id) state.fileB = null;
+    if (poolSettingsId === b.dataset.id) { poolSettingsId = null; renderParsePanel(); }
+    renderAssignments();
+    updateNextSteps();
     refreshFileList();
     refreshGridFileList();
   });
@@ -748,8 +811,8 @@ $("#btn-swap").onclick = () => {
     col_a: p.col_b, col_b: p.col_a, is_key: p.is_key, sf_field: null,
   }));
   [state.filtersA, state.filtersB] = [state.filtersB, state.filtersA];
-  renderParsePanel("a"); renderParsePanel("b");
-  renderPreview("a"); renderPreview("b");
+  renderAssignments();
+  refreshFileList();
   rebuildMappingSelects();
   updateNextSteps();
   toast("ファイルAとBを入れ替えました(マッピングも反転)");
