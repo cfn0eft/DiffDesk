@@ -911,6 +911,17 @@ def diff_columns_summary(diff_id: str):
     return {"columns": column_diff_summary(result)}
 
 
+@router.get("/diff/{diff_id}/value-rule-count")
+def value_rule_count(diff_id: str, col_a: str, value_a: str, value_b: str):
+    """値ルール(全行既知)を登録した場合に影響するセル数(確認ダイアログ用)。"""
+    result = _diff_with_known(diff_id)
+    count = sum(
+        1 for rd in result.rows if rd.status == "changed"
+        for cd in rd.cell_diffs
+        if cd.col_a == col_a and cd.value_a == value_a and cd.value_b == value_b)
+    return {"count": count}
+
+
 @router.get("/history")
 def get_history(limit: int = 50):
     return {"history": load_history(limit=limit)}

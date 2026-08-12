@@ -741,3 +741,16 @@ class TestV0130ReportNaming:
             assert marker in text, marker
         # 変更セルの旧→新データが入っている(0002のメール)
         assert "hanako@example.com" in text and "hanako-new@example.com" in text
+
+
+class TestV0131ValueRuleCount:
+    def test_count_endpoint(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        r = client.get(f"/api/diff/{diff_id}/value-rule-count",
+                       params={"col_a": "メール", "value_a": "hanako@example.com",
+                               "value_b": "hanako-new@example.com"})
+        assert r.status_code == 200
+        assert r.json()["count"] == 1
+        r2 = client.get(f"/api/diff/{diff_id}/value-rule-count",
+                        params={"col_a": "メール", "value_a": "x", "value_b": "y"})
+        assert r2.json()["count"] == 0
