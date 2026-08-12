@@ -59,4 +59,11 @@ def create_app() -> FastAPI:
         html = html.replace("{{V}}", __version__)
         return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
+    @app.get("/help", include_in_schema=False)
+    def help_page():
+        """ヘルプ(目次・検索付きの使い方ガイド)。"""
+        html = (STATIC_DIR / "help.html").read_text(encoding="utf-8")
+        html = html.replace("{{V}}", __version__)
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
     return app

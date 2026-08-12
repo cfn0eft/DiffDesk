@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DiffDesk ヘルプ</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css?v={{V}}">
+<style>
+  body { background: var(--bg); }
+  .help-layout { display: flex; max-width: 1200px; margin: 0 auto; gap: 14px; padding: 10px; }
+  .help-toc {
+    flex: 0 0 240px; position: sticky; top: 10px; align-self: flex-start;
+    background: var(--panel); border: 1px solid var(--border-strong);
+    padding: 8px; max-height: calc(100vh - 60px); overflow-y: auto;
+  }
+  .help-toc h2 { margin: 0 0 6px; font-size: 13px; }
+  .help-toc a { display: block; padding: 3px 6px; color: var(--text); text-decoration: none; font-size: 12px; }
+  .help-toc a:hover { background: #e6ebe4; }
+  .help-toc a.lv2 { padding-left: 18px; color: var(--hint); }
+  .help-toc input { width: 100%; margin-bottom: 6px; }
+  .help-body { flex: 1; min-width: 0; }
+  .help-body section {
+    background: var(--panel); border: 1px solid var(--border-strong);
+    padding: 10px 16px; margin-bottom: 12px;
+  }
+  .help-body h2 {
+    margin: -10px -16px 10px; padding: 6px 16px; font-size: 14px;
+    background: var(--accent); color: #fff;
+  }
+  .help-body h3 {
+    font-size: 13px; margin: 14px 0 4px; padding-bottom: 2px;
+    border-bottom: 2px solid var(--border);
+  }
+  .help-body p, .help-body li { line-height: 1.85; font-size: 13px; }
+  .help-body ol, .help-body ul { padding-left: 1.6em; margin: 4px 0; }
+  .help-body table { margin: 6px 0; }
+  .help-body td, .help-body th { white-space: normal; }
+  kbd {
+    background: #f1efe9; border: 1px solid var(--border-strong); border-bottom-width: 2px;
+    padding: 0 5px; font-size: 12px; font-family: inherit;
+  }
+  .tag {
+    display: inline-block; background: var(--accent); color: #fff;
+    font-size: 11px; padding: 0 6px; margin-right: 4px; vertical-align: 1px;
+  }
+  .tip { background: #eef3ec; border-left: 4px solid var(--accent); padding: 6px 10px; margin: 8px 0; }
+  .warn2 { background: #f7f0e0; border-left: 4px solid #b3872c; padding: 6px 10px; margin: 8px 0; }
+  .no-hit { display: none !important; }
+  code { background: #f1efe9; padding: 0 4px; border: 1px solid var(--border-light); }
+  @media print { .help-toc { display: none; } header { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1><img src="/static/icon.svg" alt="" class="applogo">DiffDesk ヘルプ <span class="ver">v{{V}}</span></h1>
+</header>
+
+<div class="help-layout">
+<nav class="help-toc" id="toc">
+  <h2>目次</h2>
+  <input id="help-search" placeholder="ヘルプ内を検索(例: 既知)">
+  <a href="#start">はじめに — 5分で照合</a>
+  <a href="#tab-load" class="lv2">1. 読み込み</a>
+  <a href="#tab-map" class="lv2">2. 紐づけ</a>
+  <a href="#tab-diff" class="lv2">3. 照合</a>
+  <a href="#link">手動紐づけ・候補提案</a>
+  <a href="#known">既知差分(容認)</a>
+  <a href="#session">案件・セッション・元に戻す</a>
+  <a href="#output">出力・レポート・検証パック</a>
+  <a href="#sf">Salesforce連携</a>
+  <a href="#junction">多対多検証</a>
+  <a href="#edit">編集・整形 / ツール</a>
+  <a href="#ai">Web版AI連携(コピペ)</a>
+  <a href="#shortcut">ショートカット一覧</a>
+  <a href="#faq">よくある質問</a>
+</nav>
+
+<div class="help-body" id="body">
+
+<section id="start">
+  <h2>はじめに — 5分で照合</h2>
+  <p>DiffDeskは「ヘッダーが違う2つの表データ」を突き合わせるローカルツールです。データは外部に送信されません。</p>
+  <ol>
+    <li><b>読み込み</b> — 2つのファイル(CSV / TSV / Excel)を画面にドロップ。最初の2つが自動で 基準(A)・比較(B) になります</li>
+    <li><b>おまかせで差分実行 ▶</b> を押す — 列の対応とキーを自動推定してすぐ照合します</li>
+    <li><b>照合結果を見る</b> — 上部の判定(OK / 要確認)と、色付きの差分表(<span style="background:#f2dcdc">赤=Aのみ</span> / <span style="background:#dceadc">緑=Bのみ</span> / <span style="background:#fff3c4">黄=値の相違</span>)を確認</li>
+    <li>行をクリックすると<b>全項目の照合詳細</b>。問題ない差異は「<b>既知にする</b>」で容認</li>
+    <li>必要なレポートを<b>出力</b>(照合レポート / 検証パックzip / Data Loader用CSV)</li>
+  </ol>
+  <div class="tip">自動推定が合わないときだけ「2. 紐づけ」タブで列の対応とキーを手で直します。設定は<b>プロファイル</b>に保存すれば翌月から読み込むだけです。</div>
+</section>
+
+<section id="tab-load">
+  <h2>1. 読み込みタブ</h2>
+  <h3>ファイルの読み込みとA/Bの割当</h3>
+  <ul>
+    <li>ファイルは<b>何個でも</b>読み込めます。一覧のラジオボタンで 基準(A) と 比較(B) を選びます</li>
+    <li><b>A=正とするデータ(移行元・マスタ)、B=確認したいデータ(Salesforceエクスポート等)</b>です</li>
+    <li>「A ⇔ B を入れ替え」でワンクリック交換できます</li>
+  </ul>
+  <h3>文字化け・読み込み設定</h3>
+  <ul>
+    <li>エンコーディング(UTF-8 / CP932等)は自動判定されます。化けたら「<b>読込設定</b>」からエンコーディングを選び「再読込」— プレビューが直れば正解です</li>
+    <li>Excelは<b>シート</b>と<b>ヘッダー行の位置</b>(タイトル行が上にある場合など)を指定できます</li>
+    <li>先頭ゼロ(0001等)は壊れません。全セルを文字列として扱います</li>
+  </ul>
+  <h3>セッション保存/復元</h3>
+  <p>「セッション保存/復元」パネルで、読み込んだファイルの中身・A/B割当・紐づけ設定を<b>まるごと保存</b>できます。翌日は「復元」を押すだけで差分実行まで自動で戻ります。</p>
+</section>
+
+<section id="tab-map">
+  <h2>2. 紐づけタブ</h2>
+  <h3>列マッピング</h3>
+  <ul>
+    <li>「<b>自動対応付け</b>」— 列名の一致(全半角ゆれ含む)・ユーザー辞書・値の中身から対応を推定します</li>
+    <li>手動で直すときは各行のプルダウンで A列↔B列 を選択。「＋ペアを追加」で増やせます</li>
+    <li><b>キー</b>☑ = レコード同士を結びつける列(社員番号・検体番号など)。複数列の複合キーも可</li>
+    <li>「対応を辞書に学習」— 今の対応を記憶させ、次回の自動対応付けで最優先されます</li>
+  </ul>
+  <h3>キー方式(キーになる列がないとき)</h3>
+  <table>
+    <tr><th>方式</th><th>動作</th><th>使いどころ</th></tr>
+    <tr><td>キー列で結合(既定)</td><td>キー☑の列で照合</td><td>IDがある通常の照合</td></tr>
+    <tr><td>行番号で比較</td><td>上から順に1行ずつ突き合わせ</td><td>並び順が同じ出力同士</td></tr>
+    <tr><td>行の内容で比較</td><td>全列一致した行同士を対応付け(順不同)</td><td>「同じ行が両方にあるか」だけ確認</td></tr>
+  </table>
+  <h3>比較オプション(正規化)</h3>
+  <ul>
+    <li>前後の空白 / 全角半角(NFKC)/ 大文字小文字 / <b>数値表記(1551 = 1551.0)</b>を同一視できます。既定は空白・全半角・数値がON</li>
+    <li>正規化は<b>比較にだけ</b>使われ、表示と出力は常に元の値のままです</li>
+  </ul>
+  <h3>行フィルタ・プロファイル</h3>
+  <ul>
+    <li>行フィルタ: 比較前にA/Bそれぞれを条件で絞り込み(例: 部署=営業部のみ)</li>
+    <li>プロファイル: マッピング+オプション+フィルタ一式を名前を付けて保存/読込。JSONファイルとしての書出/読込も可</li>
+  </ul>
+</section>
+
+<section id="tab-diff">
+  <h2>3. 照合タブ</h2>
+  <p>3つのサブタブに分かれています: <span class="tag">照合結果</span><span class="tag">紐づけ・既知の管理</span><span class="tag">履歴・証跡</span></p>
+  <h3>照合判定</h3>
+  <ul>
+    <li>最上部に <b>OK / 要確認</b> の判定と進捗バー。「Aの全レコードがBに正しく登録されているか」を判定します</li>
+    <li>Bにしかないレコードが正常な運用なら「SFに元からあるレコード(Bのみ)を許容する」をON</li>
+  </ul>
+  <h3>差分表の見方</h3>
+  <ul>
+    <li><b>統合</b>表示: 1レコード1行。変更セルは「A側の値 → B側の値」。クリックでマージ採用側を選べます</li>
+    <li><b>左右分割</b>表示: エディタ風に左=A・右=B。同じ高さの行が対応レコード、スクロール連動</li>
+    <li>表示フィルタ: 全て / Aのみ / Bのみ / <b>未対応</b> / 変更 / 一致(件数付き)</li>
+    <li><b>行クリック=照合詳細</b>(全項目の✔✖)。<kbd>n</kbd> / <kbd>p</kbd> で次/前の要確認行へジャンプ</li>
+    <li>「⛶ 全画面」で広く表示、「👀 見比べ」は照合なしの目視確認用別ウィンドウ</li>
+  </ul>
+</section>
+
+<section id="link">
+  <h2>手動紐づけ・候補提案</h2>
+  <h3>●ドラッグで紐づけ(キーが違うレコード同士をペアに)</h3>
+  <ol>
+    <li>左右分割表示にして、表示フィルタを「<b>未対応</b>」にする → <b>紐づけモード</b>(左=Aのみ・右=Bのみを詰めて表示、左右独立スクロール)</li>
+    <li>行端の <b>●</b> をドラッグして反対側の行に落とす</li>
+    <li>一致率プレビュー付きの確認画面で「紐づけ」を押す(⇔印が付きます)</li>
+  </ol>
+  <div class="tip">紐づけはキーの組で保存されるので、同じファイルで差分を再実行しても自動で再適用されます。解除は詳細画面か「手動紐づけの管理」から。</div>
+  <h3>候補の自動提案と一括承認</h3>
+  <ul>
+    <li>「候補を自動提案」— 値の類似度から「同じレコードらしい組」を提案(しきい値変更可)</li>
+    <li>「この一致率以上を一括承認」— しきい値(100%のみ〜60%以上)を選んでまとめて登録。実行前に件数の確認が出ます</li>
+  </ul>
+</section>
+
+<section id="known">
+  <h2>既知差分(「確認済み・問題なし」の容認)</h2>
+  <p>照合詳細画面(行クリック)から3種類の登録ができます:</p>
+  <table>
+    <tr><th>種類</th><th>ボタン</th><th>効果</th></tr>
+    <tr><td>セル差分</td><td>既知にする(この行のみ)</td><td>この行のこの項目の差異だけ容認</td></tr>
+    <tr><td>値ルール(全行)</td><td>全行で既知…</td><td>同じ値の組(例: 男→Male)を全行まとめて容認。件数確認あり</td></tr>
+    <tr><td>欠落行</td><td>この欠落を既知にする</td><td>Aのみ/Bのみのレコードの欠落を容認</td></tr>
+  </table>
+  <ul>
+    <li>登録した差異は以後の照合で問題に数えず、判定・レポートでは「既知」として区別されます</li>
+    <li>一覧・削除は「紐づけ・既知の管理」サブタブ。誤登録は<b>↩ 元に戻す</b>でも取り消せます</li>
+  </ul>
+</section>
+
+<section id="session">
+  <h2>案件・セッション・元に戻す</h2>
+  <h3>案件(画面上部)</h3>
+  <ul>
+    <li>既知差分・照合履歴・手動紐づけ・ユーザー辞書・セッション・監査ログは<b>案件ごと</b>に保存されます</li>
+    <li>「＋新規」で案件を作成。切り替えると画面のデータもその案件のものに変わります</li>
+    <li>今までのデータは「既定」案件にそのまま残っています</li>
+  </ul>
+  <h3>↩ 元に戻す(統一アンドゥ)</h3>
+  <ul>
+    <li>既知差分・手動紐づけ・ユーザー辞書の<b>登録/削除/全削除を直近30操作</b>までさかのぼって取り消せます</li>
+    <li>ボタンにマウスを乗せると「次に取り消される操作」が表示されます</li>
+  </ul>
+  <h3>セッション保存/復元</h3>
+  <ul>
+    <li>読み込みタブのパネルから。ファイルの中身ごと保存されるので、元ファイルが手元になくても復元できます</li>
+    <li>同名で保存すると上書き。案件を切り替えるとその案件のセッション一覧になります</li>
+  </ul>
+</section>
+
+<section id="output">
+  <h2>出力・レポート・検証パック</h2>
+  <table>
+    <tr><th>出力</th><th>内容</th></tr>
+    <tr><td>照合レポートCSV / Excel</td><td>全行の分類と差分セル。Excel版は色付き</td></tr>
+    <tr><td>検証レポートExcel / CSV</td><td>投入検証の合否・問題行。Excel版は手動紐づけ・既知差分の監査シート付き</td></tr>
+    <tr><td>共有用HTMLレポート</td><td>フィルタ・検索内蔵の単一HTML。メール添付でそのまま開けます</td></tr>
+    <tr><td><b>検証パック(zip)</b></td><td>上記+既知差分+手動紐づけ+監査ログ+サマリーREADMEを一括。<b>照合完了時のエビデンスはこれ1つでOK</b></td></tr>
+    <tr><td>マージ結果を新規ファイル化</td><td>変更セルごとにA/Bどちらを採用するか選んだ結果を新しいファイルに</td></tr>
+  </table>
+  <p>ファイル名は「照合レポート_A_vs_B_日時.csv」の形式で自動的に付きます。</p>
+  <h3>履歴・証跡サブタブ</h3>
+  <ul>
+    <li><b>照合履歴</b>: 実行ごとの一致率・件数の推移</li>
+    <li><b>監査ログ</b>: いつ・何をしたかの操作記録(照合実行・登録・出力など)。CSV出力可</li>
+  </ul>
+</section>
+
+<section id="sf">
+  <h2>Salesforce連携(Data Loader用)</h2>
+  <p>照合結果サブタブの出力欄 →「Salesforce連携」。<b>DiffDeskはSalesforce APIに接続しません</b>(CSV生成のみ)。</p>
+  <ul>
+    <li><b>アップサートCSV</b>: Aのみ(insert)+変更(update)行をAの値で出力。外部ID列と文字コード(既定: UTF-8 BOM付き)を選択。ヘッダーは「SF項目名」欄で変換できます</li>
+    <li><b>復元用CSV</b>: 変更行の「投入前のSF値」をupdate用に保存。<b>投入前に必ず出力</b>しておくと、誤投入時にこのCSVで元に戻せます</li>
+    <li><b>削除用CSV</b>: Bのみ行のId。Data Loaderの削除は取り消せないため、内容を必ず確認してから</li>
+    <li><b>.sdlマッピング</b>: Data Loader側のフィールド対応ファイル。読み込めば手作業のマッピング不要</li>
+  </ul>
+  <h3>投入後の確認(ツールタブ)</h3>
+  <ul>
+    <li><b>エラーファイル分析</b>: Data Loaderの error.csv を読み込むと失敗理由を日本語で集計し、対処ヒントと再投入用CSVを生成</li>
+    <li>success.csv から新規作成レコードの<b>取り消し用delete CSV</b>も作れます</li>
+  </ul>
+</section>
+
+<section id="junction">
+  <h2>多対多検証(中間オブジェクト)</h2>
+  <p>「症例 × 検査項目」のような中間(ジャンクション)オブジェクトの投入検証を行います。</p>
+  <ol>
+    <li>投入元データと、Salesforceからエクスポートした中間オブジェクトを読み込む</li>
+    <li>複合キーの組み立てルールを設定(例: <code>{A}-{B}</code>)。「テンプレートを自動推定」も使えます</li>
+    <li>照合すると、一致 / 欠落(投入漏れ)/ 想定外 を分類し、<b>孤児レコードの原因</b>(親Aなし・親Bなし・原因不明)を分析します</li>
+    <li>関係ビューで「どの親にどのレコードがぶら下がっているか」を目視確認できます</li>
+  </ol>
+  <p>移行定義JSON(fields / valueMap / composite等)を読み込むと、投入時の変換を再現した照合ができます(紐づけタブの「JSONファイル読込」)。</p>
+</section>
+
+<section id="edit">
+  <h2>編集・整形 / ツール</h2>
+  <h3>編集・整形タブ</h3>
+  <ul>
+    <li>グリッドでセル編集(Enterで下へ移動)・行列の追加削除・ソート。「元に戻す」対応</li>
+    <li>検索・置換(正規表現可)、一括クレンジング(空白除去・全半角・日付統一・数値表記ほか)</li>
+    <li>表記ゆれ検出→一括統一、検証(重複・必須・形式・許可値・範囲)、列の分割/付加、匿名化 など</li>
+    <li>編集後は「サーバーに保存」してから、CSV / Excel でダウンロード</li>
+  </ul>
+  <h3>ツールタブ</h3>
+  <ul>
+    <li>ファイル結合(縦)/ 完全重複行の削除 / 文字コード一括変換(対象は読み込みタブの一覧でチェック)</li>
+    <li>Data Loaderエラーファイル分析 / ファイル健康診断(列プロファイル+「いつもと違う」検知)</li>
+  </ul>
+</section>
+
+<section id="ai">
+  <h2>Web版AI連携(コピペ方式)</h2>
+  <p>紐づけの判断が難しいとき、Web版のAI(Gemini等)に判断させることができます。<b>DiffDesk自体はAIに一切接続しません</b> — プロンプトのコピーと回答の貼り付けだけです。</p>
+  <ol>
+    <li>「紐づけ・既知の管理」サブタブ →「Web版AIに判断させる」→「AI用プロンプトをコピー」</li>
+    <li>ブラウザでAIに貼り付けて実行</li>
+    <li>AIの回答(JSONを含むテキスト)をそのまま貼り戻して「回答を取り込み」</li>
+    <li>候補として表示されるので、内容を確認して承認(勝手に登録はされません)</li>
+  </ol>
+  <div class="warn2">プロンプトには未対応行のデータがそのまま含まれます。個人情報・機密情報の取り扱いルールに従って使用してください。</div>
+</section>
+
+<section id="shortcut">
+  <h2>ショートカット一覧</h2>
+  <table>
+    <tr><th>キー</th><th>動作</th></tr>
+    <tr><td><kbd>1</kbd>〜<kbd>6</kbd></td><td>タブ切替(読み込み / 紐づけ / 照合 / 編集・整形 / 多対多 / ツール)</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>差分を実行(どの画面からでも)</td></tr>
+    <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>照合結果で 次/前 の要確認行へジャンプ</td></tr>
+    <tr><td><kbd>?</kbd></td><td>ヘルプを開く</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>ダイアログ・全画面を閉じる</td></tr>
+  </table>
+</section>
+
+<section id="faq">
+  <h2>よくある質問</h2>
+  <h3>プレビューが文字化けする</h3>
+  <p>自動判定が外れています。読み込みタブの「読込設定」からエンコーディング(CP932 / UTF-8等)を選び直して「再読込」。プレビューが直れば正しい判定です。</p>
+  <h3>1551 と 1551.0 が差異になる</h3>
+  <p>既定では同一視します。差異になる場合はヘッダーのバージョンが古い可能性(下記)か、比較オプションの「数値の表記を同一視」がOFFです。逆に厳密に区別したいときはOFFにしてください。</p>
+  <h3>キーになる列がない</h3>
+  <p>紐づけタブの「紐づけキー」を「行番号で比較」(並び順が同じ場合)か「行の内容で比較」に切り替えます。</p>
+  <h3>1つのセルだけ既知にしたいのに全部が既知になった</h3>
+  <p>「既知にする(この行のみ)」= 1セルだけ、「全行で既知…」= 同じ値の組を全行まとめて、です。間違えたら <b>↩ 元に戻す</b> で取り消せます。</p>
+  <h3>更新したのに画面が変わらない</h3>
+  <p>ヘッダー右上のバージョン表示を確認してください。古いままなら、アプリを再起動(ターミナルでCtrl+C→再度 <code>diffdesk</code>)し、ブラウザを再読み込みします。</p>
+  <h3>CP932で保存するとエラーになる</h3>
+  <p>CP932で表せない文字(例: 𩸽)が含まれています。エラーに行・列・文字が表示されるので、修正するか UTF-8(BOM付き)で保存してください。</p>
+  <h3>キー重複の警告が出た</h3>
+  <p>同じキー値の行は正しく突き合わせできないため照合から除外されています。編集・整形タブの検証で該当行を特定できます。</p>
+  <h3>データはどこに保存される?</h3>
+  <p>ホームフォルダの <code>.diffdesk</code> 配下です(案件別データは <code>projects/</code>、プロファイルは <code>profiles/</code>)。外部への送信はありません。</p>
+  <h3>アップデートするには</h3>
+  <p><code>python -m pip install --upgrade "diffdesk @ git+https://github.com/cfn0eft/DiffDesk.git"</code> を実行して再起動。新しい版が出るとヘッダーに ⬆ バッジが表示されます。</p>
+</section>
+
+<p class="hint" style="text-align:center; margin:16px">DiffDesk v{{V}} — 詳細・更新履歴は <a href="https://github.com/cfn0eft/DiffDesk" target="_blank" rel="noopener">GitHub</a> / <a href="https://github.com/cfn0eft/DiffDesk/releases" target="_blank" rel="noopener">Releases</a></p>
+</div>
+</div>
+
+<script type="module">
+// 目次クリックでスムーズ移動 + 検索でセクション絞り込み
+const search = document.getElementById("help-search");
+const sections = [...document.querySelectorAll(".help-body section")];
+const tocLinks = [...document.querySelectorAll(".help-toc a")];
+search.addEventListener("input", () => {
+  const q = search.value.trim().toLowerCase();
+  sections.forEach(sec => {
+    const hit = !q || sec.textContent.toLowerCase().includes(q);
+    sec.classList.toggle("no-hit", !hit);
+  });
+  tocLinks.forEach(a => {
+    const sec = document.querySelector(a.getAttribute("href"));
+    a.classList.toggle("no-hit", !!(sec && sec.classList.contains("no-hit")));
+  });
+});
+</script>
+</body>
+</html>
