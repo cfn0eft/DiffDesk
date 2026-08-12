@@ -58,6 +58,16 @@
     <div id="pool-preview"></div>
   </div>
 
+  <details class="card sub" id="worksession-card">
+    <summary>セッション保存/復元(読み込んだファイル・A/B割当・紐づけ設定をまるごと保存して、続きから再開)</summary>
+    <p class="hint">ファイルの中身ごと現在の案件に保存します。翌日は「復元」を押すだけで同じ状態から再開できます(差分は復元後に自動実行)。</p>
+    <div class="toolbar">
+      <input id="ws-name" placeholder="セッション名(例: 8月照合 作業中)" style="width:260px">
+      <button id="ws-save" class="primary">現在の状態を保存</button>
+    </div>
+    <div id="ws-list"></div>
+  </details>
+
   <div id="next-steps" class="card" hidden>
     <div class="toolbar">
       <span><b>両ファイルの読み込みが完了しました。</b>次のステップへ:</span>

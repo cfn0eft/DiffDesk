@@ -858,3 +858,50 @@ class TestV0160ProjectsUndo:
         monkeypatch.setitem(routes_mod._update_cache, "at", 0.0)
         r = client.get("/api/update-check").json()
         assert r["latest"] is None and r["update_available"] is False
+
+
+class TestV0170Worksession:
+    def test_save_restore_roundtrip(self, client):
+        fa = upload(client, "a.csv", "id,v\n1,x\n2,y\n".encode("utf-8"))["file_id"]
+        fb = upload(client, "b.csv", "id,v\n1,x\n2,z\n".encode("utf-8"))["file_id"]
+        r = client.post("/api/worksession/save", json={
+            "name": "作業1", "file_a": fa, "file_b": fb,
+            "mapping": {"pairs": [{"col_a": "id", "col_b": "id", "is_key": True},
+                                  {"col_a": "v", "col_b": "v"}],
+                        "key_mode": "columns"},
+            "options": {"trim": True}, "row_filter": {},
+        })
+        assert r.status_code == 200, r.text
+        assert len(r.json()["files"]) == 2
+
+        r = client.get("/api/worksessions").json()
+        assert r["sessions"][0]["name"] == "作業1"
+
+        r = client.post("/api/worksession/restore", json={"name": "作業1"})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["role_a"] and body["role_b"]
+        assert body["mapping"]["key_mode"] == "columns"
+        # 復元されたファイルでそのまま差分が実行できる
+        d = client.post("/api/diff", json={
+            "file_a": body["role_a"], "file_b": body["role_b"],
+            "mapping": body["mapping"],
+        })
+        assert d.status_code == 200
+        assert d.json()["summary"]["changed"] == 1
+
+        r = client.delete("/api/worksession/作業1")
+        assert r.status_code == 200
+        assert client.get("/api/worksessions").json()["sessions"] == []
+
+    def test_restore_missing_404ish(self, client):
+        r = client.post("/api/worksession/restore", json={"name": "ない"})
+        assert r.status_code == 400
+
+    def test_sessions_scoped_to_project(self, client):
+        upload(client, "a.csv", "id\n1\n".encode("utf-8"))
+        client.post("/api/worksession/save", json={"name": "s1"})
+        client.post("/api/projects", json={"name": "別案件"})
+        assert client.get("/api/worksessions").json()["sessions"] == []
+        client.post("/api/projects/switch", json={"name": "既定"})
+        assert len(client.get("/api/worksessions").json()["sessions"]) == 1

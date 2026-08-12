@@ -101,6 +101,7 @@ from ..core import (
     write_csv,
     write_xlsx,
 )
+from ..core import worksession as ws
 from ..core.profile import (
     delete_profile,
     list_profiles,
@@ -956,6 +957,67 @@ def update_check():
     latest = _update_cache["latest"]
     available = bool(latest) and _t(latest) > _t(__version__)
     return {"current": __version__, "latest": latest, "update_available": available}
+
+
+# ---------------------------------------------------------------- 作業セッション
+@router.post("/worksession/save")
+def worksession_save(req: sc.WorksessionSaveRequest):
+    """読み込み済みファイル(生データ)+設定をまるごと保存する。"""
+    files = []
+    for e in store.list_files():
+        if not e.raw:
+            continue  # 結合結果などの生成データは保存対象外
+        role = ("a" if e.file_id == req.file_a
+                else "b" if e.file_id == req.file_b else None)
+        files.append({
+            "filename": e.filename,
+            "raw_b64": ws.encode_raw(e.raw),
+            "parse_params": e.parse_params or {},
+            "role": role,
+        })
+    payload = {"files": files, "mapping": req.mapping,
+               "options": req.options, "row_filter": req.row_filter}
+    return ws.save_worksession(req.name, payload)
+
+
+@router.get("/worksessions")
+def worksession_list():
+    return {"sessions": ws.list_worksessions()}
+
+
+@router.post("/worksession/restore")
+def worksession_restore(req: sc.WorksessionNameRequest):
+    """保存済みセッションのファイルをプールへ再投入し、設定一式を返す。"""
+    data = ws.load_worksession(req.name)
+    role_a = role_b = None
+    infos = []
+    for f in data.get("files", []):
+        raw = ws.decode_raw(f.get("raw_b64", ""))
+        entry = store.add_file(f.get("filename", "無題.csv"), raw)
+        params = f.get("parse_params") or {}
+        table = load_table(raw, entry.filename,
+                           encoding=params.get("encoding"),
+                           delimiter=params.get("delimiter"),
+                           sheet=params.get("sheet"),
+                           header_row=int(params.get("header_row", 1)) - 1)
+        store.set_table(entry.file_id, table, params)
+        infos.append({"file_id": entry.file_id, "filename": entry.filename,
+                      "role": f.get("role")})
+        if f.get("role") == "a":
+            role_a = entry.file_id
+        elif f.get("role") == "b":
+            role_b = entry.file_id
+    return {"files": infos, "role_a": role_a, "role_b": role_b,
+            "mapping": data.get("mapping") or {},
+            "options": data.get("options") or {},
+            "row_filter": data.get("row_filter") or {},
+            "name": data.get("name"), "saved_at": data.get("saved_at")}
+
+
+@router.delete("/worksession/{name}")
+def worksession_delete(name: str):
+    ws.delete_worksession(name)
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- 既知差分・履歴・辞書

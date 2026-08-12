@@ -247,3 +247,16 @@ class ProfileSaveRequest(BaseModel):
 
 class ProjectRequest(BaseModel):
     name: str
+
+
+class WorksessionSaveRequest(BaseModel):
+    name: str
+    file_a: str = ""
+    file_b: str = ""
+    mapping: dict = {}
+    options: dict = {}
+    row_filter: dict = {}
+
+
+class WorksessionNameRequest(BaseModel):
+    name: str
