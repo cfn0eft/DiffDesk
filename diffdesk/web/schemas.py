@@ -268,3 +268,8 @@ class ExportPackRequest(BaseModel):
 
 class KnownByCauseRequest(BaseModel):
     cause: str
+
+
+class PreflightRequest(BaseModel):
+    file_a: str
+    file_b: str

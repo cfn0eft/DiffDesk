@@ -1006,3 +1006,37 @@ class TestV0200ClassifySearch:
         r = client.get(f"/api/diff/{diff_id}/rows",
                        params={"col": "数", "status": "changed"}).json()
         assert r["total"] == 1 and r["rows"][0]["key"] == ["2"]
+
+
+class TestV0210PrevCompare:
+    def run_pair(self, client, content_b):
+        fa = upload(client, "m.csv", "id,v\n1,x\n2,y\n3,z\n".encode("utf-8"))["file_id"]
+        fb = upload(client, "s.csv", content_b.encode("utf-8"))["file_id"]
+        r = client.post("/api/diff", json={
+            "file_a": fa, "file_b": fb,
+            "mapping": {"pairs": [{"col_a": "id", "col_b": "id", "is_key": True},
+                                  {"col_a": "v", "col_b": "v"}]}})
+        return r.json()["diff_id"]
+
+    def test_compare_prev_flow(self, client):
+        d1 = self.run_pair(client, "id,v\n1,x\n2,WRONG\n")
+        r = client.get(f"/api/diff/{d1}/compare-prev").json()
+        assert r["available"] is False  # 初回は前回なし
+        d2 = self.run_pair(client, "id,v\n1,BROKEN\n2,y\n")
+        r = client.get(f"/api/diff/{d2}/compare-prev").json()
+        assert r["available"] and r["counts"] == {
+            "new": 1, "resolved": 1, "continuing": 1}
+        # 前回比較フィルタで行取得
+        rows = client.get(f"/api/diff/{d2}/rows", params={"prev": "new"}).json()
+        assert rows["total"] == 1 and rows["rows"][0]["key"] == ["1"]
+        rows = client.get(f"/api/diff/{d2}/rows",
+                          params={"prev": "continuing"}).json()
+        assert rows["total"] == 1 and rows["rows"][0]["key"] == ["3"]
+
+    def test_preflight_endpoint(self, client):
+        fa = upload(client, "a.csv", "id,v\n1,x\n2,y\n".encode("utf-8"))["file_id"]
+        fb = upload(client, "b.csv", "id,v\n1,x\n1,x\n".encode("utf-8"))["file_id"]
+        r = client.post("/api/preflight", json={"file_a": fa, "file_b": fb})
+        assert r.status_code == 200
+        msgs = " / ".join(c["message"] for c in r.json()["checks"])
+        assert "B側に重複" in msgs

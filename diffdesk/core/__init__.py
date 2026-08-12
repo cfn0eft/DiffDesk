@@ -52,6 +52,8 @@ from .classify import (
     value_rules_for_cause,
 )
 from .pack import build_verification_pack
+from .preflight import preflight
+from .runsnap import compare_with_prev, prev_key_sets, save_run_snapshot
 from .project import (
     create_project,
     delete_project,
