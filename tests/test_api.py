@@ -710,3 +710,34 @@ class TestV0120JunctionSimple:
         assert body["filename"] == "src.csv"
         assert body["preview"]["columns"] == ["会社", "製品"]
         assert "parse_params" in body
+
+
+class TestV0130ReportNaming:
+    def test_export_filenames_identifiable(self, client):
+        import urllib.parse as up
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        cases = [
+            ("/api/export/report/" + diff_id, {"format": "csv"}, "照合レポート_master_vs_sf_"),
+            ("/api/export/verify/" + diff_id, {"format": "xlsx"}, "投入検証_master_vs_sf_"),
+            ("/api/export/html/" + diff_id, {}, "照合レポート_master_vs_sf_"),
+            ("/api/export/upsert/" + diff_id, {"external_id": "社員番号"}, "アップサート_master_vs_sf_"),
+        ]
+        for path, body, prefix in cases:
+            r = client.post(path, json=body)
+            assert r.status_code == 200, r.text
+            cd = up.unquote(r.headers["content-disposition"])
+            assert prefix in cd, cd
+            # タイムスタンプ(YYYYMMDD_HHMM)付き
+            import re as _re
+            assert _re.search(r"\d{8}_\d{4}\.(csv|xlsx|html)", cd), cd
+
+    def test_rich_html_report(self, client):
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        r = client.post(f"/api/export/html/{diff_id}", json={})
+        text = r.content.decode("utf-8")
+        # リッチ要素: 進捗バー・サマリーカード・列ランキング・旧→新・凡例・フィルタ
+        for marker in ("progress", "cards", "差異の多い項目", "old", "要確認のみ",
+                       "凡例", "レコード中", "DiffDesk v"):
+            assert marker in text, marker
+        # 変更セルの旧→新データが入っている(0002のメール)
+        assert "hanako@example.com" in text and "hanako-new@example.com" in text

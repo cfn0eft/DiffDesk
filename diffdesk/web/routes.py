@@ -148,6 +148,25 @@ def _file_info(entry, table: Table | None) -> dict:
     return info
 
 
+def _safe_stem(name: str, limit: int = 40) -> str:
+    """ファイル名から識別用の安全な語幹を作る(拡張子・危険文字を除去)。"""
+    import re as _re
+    from pathlib import PurePath
+    stem = PurePath(str(name or "")).stem
+    stem = _re.sub(r'[\\/:*?"<>|\s]+', "_", stem).strip("_")
+    return stem[:limit] or "無題"
+
+
+def _report_name(base: str, *names: str, ext: str) -> str:
+    """識別できるレポートファイル名: base_A_vs_B_YYYYMMDD_HHMM.ext"""
+    from datetime import datetime
+    stems = [_safe_stem(n) for n in names if n]
+    middle = "_vs_".join(stems)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    parts = [base] + ([middle] if middle else []) + [stamp]
+    return "_".join(parts) + "." + ext
+
+
 def _download(content: bytes, filename: str, media_type: str) -> Response:
     quoted = urllib.parse.quote(filename)
     return Response(
@@ -300,7 +319,7 @@ def export_retry(file_id: str, req: sc.ExportTableRequest):
     table = store.get_table(file_id)
     retry = build_retry_table(table)
     raw = write_csv(retry, encoding=req.encoding, errors=req.errors)
-    return _download(raw, "再投入用.csv", "text/csv")
+    return _download(raw, _report_name("再投入用", store.get_file(file_id).filename, ext="csv"), "text/csv")
 
 
 @router.post("/files/{file_id}/anonymize")
@@ -590,7 +609,7 @@ def export_upsert(diff_id: str, req: sc.ExportUpsertRequest):
     table = build_upsert_table(result, external_id_col_a=req.external_id,
                                include=include)
     raw = write_csv(table, encoding=req.encoding, errors=req.errors)
-    return _download(raw, "upsert.csv", "text/csv")
+    return _download(raw, _report_name("アップサート", result.name_a, result.name_b, ext="csv"), "text/csv")
 
 
 @router.post("/export/delete/{diff_id}")
@@ -598,24 +617,24 @@ def export_delete(diff_id: str, req: sc.ExportDeleteRequest):
     result = _diff_with_known(diff_id)
     table = build_delete_table(result, id_col_b=req.id_col_b)
     raw = write_csv(table, encoding=req.encoding)
-    return _download(raw, "delete.csv", "text/csv")
+    return _download(raw, _report_name("削除用", result.name_a, result.name_b, ext="csv"), "text/csv")
 
 
 @router.get("/export/sdl/{diff_id}")
 def export_sdl(diff_id: str):
     result = _diff_with_known(diff_id)
-    return _download(build_sdl(result).encode("utf-8"), "mapping.sdl", "text/plain")
+    return _download(build_sdl(result).encode("utf-8"), _report_name("マッピング", result.name_a, result.name_b, ext="sdl"), "text/plain")
 
 
 @router.post("/export/report/{diff_id}")
 def export_report(diff_id: str, req: sc.ExportReportRequest):
     result = _diff_with_known(diff_id)
     if req.format == "xlsx":
-        return _download(build_xlsx_report(result), "差分レポート.xlsx",
+        return _download(build_xlsx_report(result), _report_name("照合レポート", result.name_a, result.name_b, ext="xlsx"),
                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     table = build_report_table(result)
     raw = write_csv(table, encoding=req.encoding)
-    return _download(raw, "差分レポート.csv", "text/csv")
+    return _download(raw, _report_name("照合レポート", result.name_a, result.name_b, ext="csv"), "text/csv")
 
 
 # ---------------------------------------------------------------- 移行定義JSON
@@ -681,7 +700,7 @@ def junction_orphans_csv(req: sc.JunctionExportRequest):
     result = verify_junction(source, a, b, j, cfg)
     table = build_orphan_table(result, cfg)
     raw = write_csv(table, encoding=req.encoding)
-    return _download(raw, "未取込一覧.csv", "text/csv")
+    return _download(raw, _report_name("未取込一覧", store.get_file(req.file_source).filename, store.get_file(req.file_j).filename, ext="csv"), "text/csv")
 
 
 @router.post("/export/verify/{diff_id}")
@@ -690,11 +709,11 @@ def export_verify(diff_id: str, req: sc.ExportVerifyRequest):
     if req.format == "xlsx":
         return _download(
             build_verification_xlsx(result, only_b_is_error=req.only_b_is_error),
-            "投入検証レポート.xlsx",
+            _report_name("投入検証", result.name_a, result.name_b, ext="xlsx"),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     table = build_verification_table(result, only_b_is_error=req.only_b_is_error)
     raw = write_csv(table, encoding=req.encoding)
-    return _download(raw, "投入検証レポート.csv", "text/csv")
+    return _download(raw, _report_name("投入検証", result.name_a, result.name_b, ext="csv"), "text/csv")
 
 
 @router.post("/export/restore/{diff_id}")
@@ -703,7 +722,7 @@ def export_restore(diff_id: str, req: sc.ExportDeleteRequest):
     result = _diff_with_known(diff_id)
     table = build_restore_table(result)
     raw = write_csv(table, encoding=req.encoding)
-    return _download(raw, "復元用_投入前のSF値.csv", "text/csv")
+    return _download(raw, _report_name("復元用_投入前のSF値", result.name_a, result.name_b, ext="csv"), "text/csv")
 
 
 @router.post("/files/{file_id}/undo-delete")
@@ -712,7 +731,7 @@ def export_undo_delete(file_id: str, req: sc.ExportDeleteRequest):
     table = store.get_table(file_id)
     undo, skipped = build_undo_delete_table(table)
     raw = write_csv(undo, encoding=req.encoding)
-    resp = _download(raw, "取り消し用delete.csv", "text/csv")
+    resp = _download(raw, _report_name("取り消し用delete", store.get_file(file_id).filename, ext="csv"), "text/csv")
     resp.headers["X-Skipped-Updates"] = str(skipped)
     return resp
 
@@ -721,7 +740,7 @@ def export_undo_delete(file_id: str, req: sc.ExportDeleteRequest):
 def export_html(diff_id: str, req: sc.ExportHtmlRequest):
     result = _diff_with_known(diff_id)
     html_text = build_html_report(result, only_b_is_error=req.only_b_is_error)
-    return _download(html_text.encode("utf-8"), "差分レポート.html", "text/html")
+    return _download(html_text.encode("utf-8"), _report_name("照合レポート", result.name_a, result.name_b, ext="html"), "text/html")
 
 
 # ---------------------------------------------------------------- 健康診断
