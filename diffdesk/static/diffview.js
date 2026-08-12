@@ -887,9 +887,9 @@ function showRecordDetail(r) {
     const label = colA === colB ? colA : `${colA} / ${colB}`;
     const knownBtn = changed.has(colA)
       ? `<button class="mini known-cell-btn" data-col="${escapeHtml(colA)}" ` +
-        `title="この行のこの差異だけを確認済み・問題なしとして登録">既知にする</button> ` +
+        `title="この行のこの差異だけを確認済み・問題なしとして登録">既知にする(この行のみ)</button> ` +
         `<button class="mini known-value-btn" data-col="${escapeHtml(colA)}" ` +
-        `title="この列で同じ値の組(A→B)になっている差異を、すべての行でまとめて既知にする(値ルールとして保存)">全行で既知</button>`
+        `title="この列で同じ値の組(A→B)になっている差異を、すべての行でまとめて既知にする(確認あり・値ルールとして保存)">全行で既知…</button>`
       : "";
     return `<tr class="${cls}"><td>${mark}</td><td>${escapeHtml(label)}</td>` +
       `<td>${escapeHtml(va)}</td><td>${escapeHtml(vb)}</td><td>${knownBtn}</td></tr>`;
@@ -970,11 +970,23 @@ function showRecordDetail(r) {
     if (cd) registerKnown({ type: "cell", key: [...r.key], col_a: cd.col_a,
                             value_a: cd.value_a, value_b: cd.value_b });
   });
-  dlg.querySelectorAll(".known-value-btn").forEach(b => b.onclick = () => {
+  dlg.querySelectorAll(".known-value-btn").forEach(b => b.onclick = async () => {
     const cd = r.cell_diffs.find(x => x.col_a === b.dataset.col);
-    if (cd) registerKnown({ type: "value", col_a: cd.col_a,
-                            value_a: cd.value_a, value_b: cd.value_b },
-                          `「${cd.col_a}: ${cd.value_a} → ${cd.value_b}」を全行で既知にしました。`);
+    if (!cd) return;
+    // 影響件数を出して確認してから登録(1セルのつもりが全行…を防ぐ)
+    let count = null;
+    try {
+      const q = new URLSearchParams({ col_a: cd.col_a, value_a: cd.value_a,
+                                      value_b: cd.value_b });
+      count = (await (await api(`/api/diff/${d.diff_id}/value-rule-count?${q}`)).json()).count;
+    } catch { /* 件数が取れなくても確認は出す */ }
+    const msg = `「${cd.col_a}: ${cd.value_a} → ${cd.value_b}」を全行で既知にします。` +
+      (count != null ? `\n現在の照合結果では ${count} 箇所に適用されます。` : "") +
+      `\n(この行だけにしたい場合はキャンセルして「既知にする」を押してください)`;
+    if (!window.confirm(msg)) return;
+    registerKnown({ type: "value", col_a: cd.col_a,
+                    value_a: cd.value_a, value_b: cd.value_b },
+                  `「${cd.col_a}: ${cd.value_a} → ${cd.value_b}」を全行(${count ?? "?"}箇所)で既知にしました。管理パネルから削除で戻せます。`);
   });
   const rowBtn = dlg.querySelector("#known-row-btn");
   if (rowBtn) rowBtn.onclick = () =>
