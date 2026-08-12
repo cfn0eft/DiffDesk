@@ -40,8 +40,13 @@ from ..core import (
     audit_table,
     classify_diff,
     classify_value_pair,
+    build_known_prompt,
     compare_with_prev,
+    detect_pii_in_diff,
+    missing_rows_table,
+    parse_known_answer,
     preflight,
+    ref_check,
     prev_key_sets,
     save_run_snapshot,
     value_rules_for_cause,
@@ -1140,6 +1145,61 @@ def run_preflight(req: sc.PreflightRequest):
     """A/B選択時の事前診断(キー候補・重複・行数差など)。"""
     return {"checks": preflight(store.get_table(req.file_a),
                                 store.get_table(req.file_b))}
+
+
+@router.post("/refcheck")
+def run_refcheck(req: sc.RefCheckRequest):
+    """参照整合性チェック(子ファイルの列の値がマスタ側に存在するか)。"""
+    r = ref_check(store.get_table(req.file_child), req.col_child,
+                  store.get_table(req.file_master), req.col_master)
+    r.pop("_missing_rows", None)
+    audit("参照整合性チェック",
+          f"{req.col_child} → {req.col_master}: 不一致{r['missing']}件")
+    return r
+
+
+@router.post("/export/refcheck")
+def export_refcheck(req: sc.RefCheckRequest):
+    """参照先が見つからない行のCSVを出力する。"""
+    child = store.get_table(req.file_child)
+    table = missing_rows_table(child, req.col_child,
+                               store.get_table(req.file_master), req.col_master)
+    name = store.get_file(req.file_child).filename
+    return _download(write_csv(table),
+                     _report_name("参照エラー行", name, ext="csv"), "text/csv")
+
+
+@router.get("/diff/{diff_id}/pii")
+def diff_pii(diff_id: str):
+    """AIプロンプトに含まれる個人情報らしき列の検出(警告用)。"""
+    return {"columns": detect_pii_in_diff(_diff_with_known(diff_id))}
+
+
+@router.get("/diff/{diff_id}/known-prompt")
+def known_prompt(diff_id: str):
+    """差異の仕分けをWeb版AIに依頼するプロンプトを生成する(コピペ用)。"""
+    r = build_known_prompt(_diff_with_known(diff_id))
+    return {"prompt": r["prompt"], "count": r["count"]}
+
+
+@router.post("/diff/{diff_id}/known-answer")
+def known_answer(diff_id: str, req: sc.AiAnswerRequest):
+    """AI回答を解析し、既知候補(登録はしない)を返す。"""
+    return parse_known_answer(_diff_with_known(diff_id), req.text)
+
+
+@router.post("/diff/{diff_id}/known-bulk")
+def known_bulk(diff_id: str, req: sc.KnownBulkRequest):
+    """確認済みの値ルールをまとめて既知に登録する(アンドゥ1回)。"""
+    entries = [{"type": "value", "col_a": e.get("col", e.get("col_a", "")),
+                "value_a": e.get("value_a", ""), "value_b": e.get("value_b", ""),
+                "note": str(e.get("note", ""))[:300]}
+               for e in req.entries]
+    if not entries:
+        raise DiffDeskError("登録対象がありません。")
+    added = add_known_diffs_bulk(entries, label="既知差分の一括登録(AI仕分けの承認)")
+    audit("既知差分一括登録(AI仕分け承認)", f"{added}種")
+    return {"registered": added}
 
 
 @router.get("/diff/{diff_id}/classify")

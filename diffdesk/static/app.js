@@ -252,7 +252,8 @@ export async function refreshFileList() {
       }).join("") + `</tbody></table>`;
   }
   // エラーファイル分析・許可値取得用のファイルセレクトも更新
-  for (const selId of ["#err-file-select", "#val-allow-src-file", "#health-file-select"]) {
+  for (const selId of ["#err-file-select", "#val-allow-src-file", "#health-file-select",
+                       "#ref-child-file", "#ref-master-file"]) {
     const sel = $(selId);
     if (!sel) continue;
     const cur = sel.value;
@@ -1122,3 +1123,54 @@ try {
   const tab = localStorage.getItem("diffdesk-tab");
   if (tab && tab !== "tab-diff" && $("#" + tab)) switchTab(tab);
 } catch { /* 復元できなくても既定表示で動く */ }
+
+// ---------------------------------------------------------------- 参照整合性チェック
+async function fillRefCols(fileSel, colSel) {
+  const id = $(fileSel).value;
+  const sel = $(colSel);
+  if (!id) { sel.innerHTML = ""; return; }
+  try {
+    const info = await apiJson(`/api/files/${id}/info`);
+    sel.innerHTML = info.preview.columns.map(c =>
+      `<option>${escapeHtml(c)}</option>`).join("");
+  } catch { sel.innerHTML = ""; }
+}
+$("#ref-child-file").onchange = () => fillRefCols("#ref-child-file", "#ref-child-col");
+$("#ref-master-file").onchange = () => fillRefCols("#ref-master-file", "#ref-master-col");
+
+function refcheckBody() {
+  return {
+    file_child: $("#ref-child-file").value, col_child: $("#ref-child-col").value,
+    file_master: $("#ref-master-file").value, col_master: $("#ref-master-col").value,
+  };
+}
+
+$("#btn-refcheck").onclick = async () => {
+  const b = refcheckBody();
+  if (!b.file_child || !b.file_master) return toast("ファイルを選択してください", true);
+  try {
+    const r = await postJson("/api/refcheck", b);
+    const okAll = r.missing === 0;
+    $("#refcheck-result").innerHTML =
+      `<p style="margin:6px 0"><b>${okAll ? "✔ すべて参照OK" : `✖ 参照先が見つからない値があります`}</b> — ` +
+      `全${r.total}行中 一致${r.matched} / <b style="color:${okAll ? "inherit" : "#a33c34"}">不一致${r.missing}</b> / 空欄${r.blank}` +
+      `(マスタ側のユニーク値: ${r.master_values}件)</p>` +
+      (r.missing ? `<table><thead><tr><th>見つからない値</th><th>件数</th></tr></thead><tbody>` +
+        r.missing_values.map(v =>
+          `<tr><td>${escapeHtml(v.value) || "<i>(空)</i>"}</td><td>${v.count}</td></tr>`).join("") +
+        `</tbody></table>` +
+        (r.distinct_missing > r.missing_values.length
+          ? `<p class="hint">ほか ${r.distinct_missing - r.missing_values.length}種(CSV出力で全件確認できます)</p>` : "")
+        : "");
+    $("#btn-refcheck-export").hidden = !r.missing;
+  } catch (e) { toast(e.message, true); }
+};
+$("#btn-refcheck-export").onclick = async () => {
+  try {
+    const res = await api("/api/export/refcheck", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(refcheckBody()),
+    });
+    downloadResponse(res, "参照エラー行.csv");
+  } catch (e) { toast(e.message, true); }
+};

@@ -304,6 +304,20 @@
           <button id="ai-import">回答を取り込み(候補として表示)</button>
         </div>
         <div id="ai-rejected" class="hint"></div>
+        <hr style="border:none; border-top:1px solid var(--border); margin:10px 0">
+        <h3 style="margin:4px 0">差異の仕分けをAIに依頼(容認できる差異か、真の相違か)</h3>
+        <p class="hint">変更セルの値の組(最大200種)を貼り付け用プロンプトにします。AIの回答は候補として表示され、<b>人が確認して承認したものだけ</b>が既知(値ルール)に登録されます。</p>
+        <div class="toolbar">
+          <button id="ai2-prompt-copy">仕分けプロンプトをコピー</button>
+          <span id="ai2-info" class="hint"></span>
+        </div>
+        <textarea id="ai2-answer" rows="4" style="width:100%" placeholder="AIの回答(JSONを含むテキスト)をそのまま貼り付け"></textarea>
+        <div class="toolbar">
+          <button id="ai2-import">回答を取り込み(候補として表示)</button>
+          <button id="ai2-register" class="primary" hidden>チェックした候補を既知に登録</button>
+        </div>
+        <div id="ai2-list"></div>
+        <div id="ai2-rejected" class="hint"></div>
       </details>
     </details>
     <details class="card sub" open>
@@ -634,6 +648,21 @@
     <div id="health-warnings"></div>
     <div id="health-result"></div>
   </details>
+
+  <div class="card">
+    <h2>参照整合性チェック <span class="hint">(この列の値は、マスタ側の列に存在するか — Data Loaderの参照エラーを投入前に予防)</span></h2>
+    <div class="toolbar wrap">
+      <label>チェックするファイル: <select id="ref-child-file"><option value="">(選択)</option></select></label>
+      <label>列: <select id="ref-child-col"></select></label>
+      <span>→ の値が</span>
+      <label>マスタ: <select id="ref-master-file"><option value="">(選択)</option></select></label>
+      <label>列: <select id="ref-master-col"></select></label>
+      <span>にあるか</span>
+      <button id="btn-refcheck" class="primary">チェック</button>
+      <button id="btn-refcheck-export" hidden>不一致行をCSVで出力</button>
+    </div>
+    <div id="refcheck-result"></div>
+  </div>
 
   <div class="card">
     <h2>ファイルユーティリティ <span class="hint">(上の一覧でチェックしたファイルが対象)</span></h2>

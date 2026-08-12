@@ -273,3 +273,18 @@ class KnownByCauseRequest(BaseModel):
 class PreflightRequest(BaseModel):
     file_a: str
     file_b: str
+
+
+class RefCheckRequest(BaseModel):
+    file_child: str
+    col_child: str
+    file_master: str
+    col_master: str
+
+
+class AiAnswerRequest(BaseModel):
+    text: str
+
+
+class KnownBulkRequest(BaseModel):
+    entries: list[dict]
