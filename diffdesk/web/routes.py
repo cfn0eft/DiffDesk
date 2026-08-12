@@ -18,6 +18,9 @@ from ..core import (
     apply_known_diffs,
     apply_manual_pairs,
     DiffDeskError,
+    JunctionConfig,
+    build_orphan_table,
+    verify_junction,
     add_manual_link,
     build_link_prompt,
     clear_manual_links,
@@ -602,6 +605,31 @@ def export_report(diff_id: str, req: sc.ExportReportRequest):
     table = build_report_table(result)
     raw = write_csv(table, encoding=req.encoding)
     return _download(raw, "差分レポート.csv", "text/csv")
+
+
+# ---------------------------------------------------------------- 多対多検証
+
+def _junction_inputs(req: sc.JunctionVerifyRequest):
+    return (store.get_table(req.file_source), store.get_table(req.file_a),
+            store.get_table(req.file_b), store.get_table(req.file_j),
+            JunctionConfig.from_dict(req.config))
+
+
+@router.post("/junction-verify")
+def junction_verify(req: sc.JunctionVerifyRequest):
+    """多対多(親A-中間-親B)モデルの移行検証(4ステップ)。"""
+    source, a, b, j, cfg = _junction_inputs(req)
+    return verify_junction(source, a, b, j, cfg)
+
+
+@router.post("/junction-verify/orphans")
+def junction_orphans_csv(req: sc.JunctionExportRequest):
+    """未取込の中間キー一覧(原因つき)をCSVでダウンロード。"""
+    source, a, b, j, cfg = _junction_inputs(req)
+    result = verify_junction(source, a, b, j, cfg)
+    table = build_orphan_table(result, cfg)
+    raw = write_csv(table, encoding=req.encoding)
+    return _download(raw, "未取込一覧.csv", "text/csv")
 
 
 @router.post("/export/verify/{diff_id}")

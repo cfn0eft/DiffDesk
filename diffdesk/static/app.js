@@ -5,6 +5,7 @@ import {
 } from "/static/common.js";
 import { renderDiff } from "/static/diffview.js";
 import { initGrid, refreshGridFileList } from "/static/grid.js";
+import "/static/junction.js";
 
 // ---------------------------------------------------------------- タブ
 export function switchTab(id) {

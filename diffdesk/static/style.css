@@ -372,3 +372,30 @@ dialog label { display: block; margin-top: 8px; margin-bottom: 8px; }
 #suggest-list td, #links-list td { vertical-align: top; }
 #ai-answer { font-family: inherit; font-size: 12px; box-sizing: border-box; }
 #ai-rejected { color: #7c2d25; }
+/* 多対多検証(v0.10.0) */
+.formgrid { border-collapse: collapse; margin: 4px 0; }
+.formgrid th {
+  text-align: left; padding: 4px 12px 4px 0; white-space: nowrap;
+  font-weight: 600; vertical-align: top;
+}
+.formgrid td { padding: 3px 0; }
+.formgrid select { max-width: 340px; }
+#jx-banner { padding: 10px 12px; font-weight: 700; font-size: 15px;
+  border: 1px solid var(--border-strong); margin-bottom: 10px; }
+#jx-banner.ok { background: #e2efe2; color: #2c5e2c; }
+#jx-banner.ng { background: #f6e3e1; color: #7c2d25; }
+#jx-macro table { width: 100%; }
+#jx-macro .ok-mark { color: #2c6e2c; font-weight: 700; }
+#jx-macro .ng-mark { color: #a33c34; font-weight: 700; }
+.jx-causebar { display: flex; height: 18px; border: 1px solid var(--border-strong);
+  overflow: hidden; margin: 6px 0; max-width: 560px; }
+.jx-causebar div { height: 100%; }
+.jx-c-a { background: #c05a4e; }
+.jx-c-b { background: #e0b93d; }
+.jx-c-both { background: #7c2d25; }
+.jx-c-j { background: #8a94a8; }
+.jx-legend span { display: inline-block; margin-right: 12px; font-size: 12px; }
+.jx-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; }
+.formgrid { width: 100%; }
+.formgrid td .hint { display: block; margin-top: 1px; }
+.formgrid input[type=text], .formgrid input:not([type]) { max-width: 240px; }
