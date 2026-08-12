@@ -754,3 +754,57 @@ class TestV0131ValueRuleCount:
         r2 = client.get(f"/api/diff/{diff_id}/value-rule-count",
                         params={"col_a": "メール", "value_a": "x", "value_b": "y"})
         assert r2.json()["count"] == 0
+
+
+class TestV0140KeyMode:
+    def upload_pair(self, client):
+        fa = upload(client, "a.csv",
+                    "名前,値\n山田,1\n佐藤,2\n鈴木,3\n".encode("utf-8"))["file_id"]
+        fb = upload(client, "b.csv",
+                    "name,val\n山田,1\n佐藤,9\n".encode("utf-8"))["file_id"]
+        return fa, fb
+
+    def keyless_pairs(self):
+        return [{"col_a": "名前", "col_b": "name"},
+                {"col_a": "値", "col_b": "val"}]
+
+    def test_row_number_mode(self, client):
+        fa, fb = self.upload_pair(client)
+        r = client.post("/api/diff", json={
+            "file_a": fa, "file_b": fb,
+            "mapping": {"pairs": self.keyless_pairs(), "key_mode": "row_number"},
+        })
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["key_mode"] == "row_number"
+        s = body["summary"]
+        assert s["same"] == 1 and s["changed"] == 1 and s["only_a"] == 1
+        rows = client.get(f"/api/diff/{body['diff_id']}/rows").json()["rows"]
+        assert rows[0]["key"] == ["行1"]
+
+    def test_content_mode(self, client):
+        fa, fb = self.upload_pair(client)
+        r = client.post("/api/diff", json={
+            "file_a": fa, "file_b": fb,
+            "mapping": {"pairs": self.keyless_pairs(), "key_mode": "content"},
+        })
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["key_mode"] == "content"
+        s = body["summary"]
+        # 内容一致: 山田のみ一致、佐藤2/鈴木3はAのみ、佐藤9はBのみ
+        assert s["same"] == 1 and s["changed"] == 0
+        assert s["only_a"] == 2 and s["only_b"] == 1
+
+    def test_columns_mode_keyless_rejected(self, client):
+        fa, fb = self.upload_pair(client)
+        r = client.post("/api/diff", json={
+            "file_a": fa, "file_b": fb,
+            "mapping": {"pairs": self.keyless_pairs(), "key_mode": "columns"},
+        })
+        assert r.status_code == 400
+        assert "キー" in r.json()["error"]["message"]
+
+    def test_default_key_mode_in_response(self, client):
+        _, body = TestDiffFlow().run_diff(client)
+        assert body["key_mode"] == "columns"

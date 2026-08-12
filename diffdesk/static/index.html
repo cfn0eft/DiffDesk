@@ -108,6 +108,13 @@
     <div class="toolbar">
       <button id="btn-automap">自動対応付け</button>
       <button id="btn-add-pair">＋ ペアを追加</button>
+      <label>紐づけキー:
+        <select id="key-mode" title="レコード同士をどう対応付けるか">
+          <option value="columns">キー列で結合(既定)</option>
+          <option value="row_number">行番号で比較(上から順)</option>
+          <option value="content">行の内容で比較(全列一致)</option>
+        </select>
+      </label>
       <span class="spacer"></span>
       <label>プロファイル:
         <select id="profile-select"><option value="">(選択)</option></select>
@@ -125,6 +132,7 @@
       <thead><tr><th>A列(マスタ)</th><th></th><th>B列(比較対象)</th><th>キー</th><th>SF項目名(出力用)</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
+    <p class="hint" id="key-mode-hint" hidden></p>
   </div>
 
   <div class="two-col">

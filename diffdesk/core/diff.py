@@ -61,13 +61,46 @@ def _project(table: Table, columns: list[str]) -> list[list[str]]:
     return [[row[i] for i in indices] for row in table.rows]
 
 
+def _diff_by_row_number(proj_a, proj_b, mapping, normalizer, options,
+                        cols_a, cols_b) -> list[RowDiff]:
+    """キーなし比較(行番号): 上から順に1行ずつ突き合わせる。"""
+    rows: list[RowDiff] = []
+    n = max(len(proj_a), len(proj_b))
+    width = len(str(n)) if n else 1
+    for i in range(n):
+        key = (f"行{i + 1:0{width}d}",)
+        row_a = proj_a[i] if i < len(proj_a) else None
+        row_b = proj_b[i] if i < len(proj_b) else None
+        if row_a is None:
+            rows.append(RowDiff(key=key, status="only_b", row_a=None, row_b=row_b))
+            continue
+        if row_b is None:
+            rows.append(RowDiff(key=key, status="only_a", row_a=row_a, row_b=None))
+            continue
+        cell_diffs = []
+        for vi in range(len(mapping.pairs)):
+            if not pair_values_equal(row_a[vi], row_b[vi], mapping.pairs[vi],
+                                     normalizer, options.numeric_tolerance):
+                cell_diffs.append(CellDiff(
+                    col_a=cols_a[vi], col_b=cols_b[vi],
+                    value_a=row_a[vi], value_b=row_b[vi]))
+        rows.append(RowDiff(key=key, status="changed" if cell_diffs else "same",
+                            row_a=row_a, row_b=row_b, cell_diffs=cell_diffs))
+    return rows
+
+
 def diff_tables(table_a: Table, table_b: Table, mapping: MappingConfig,
                 options: DiffOptions | None = None,
                 row_filter: RowFilter | None = None) -> DiffResult:
-    """A・Bをマッピングに従ってキー結合し差分を分類する。O(n+m)。
+    """A・Bをマッピングに従って突き合わせ、差分を分類する。O(n+m)。
 
-    - 重複キー(同一正規化キーが2回以上出現)の行は照合から除外し、警告として報告。
-    - キーが全て空の行も除外して件数を報告。
+    キー方式(mapping.key_mode):
+    - "columns": キー指定した列で結合(既定)。重複キー・空キーの行は照合から
+      除外して警告として報告
+    - "row_number": 行番号で比較(上から順)。はみ出した行は only_a / only_b
+    - "content": 全列の内容で対応付け。完全一致した行同士がペアになり、
+      それ以外は only_a / only_b(changedは出ない)。同一内容の重複行は
+      キー重複として除外・報告
     - rows の順序: Aの行順(only_a/changed/same) → Bのみの行(B順)。
     """
     options = options or DiffOptions()
@@ -79,11 +112,25 @@ def diff_tables(table_a: Table, table_b: Table, mapping: MappingConfig,
     normalizer = make_normalizer(options)
     cols_a = [p.col_a for p in mapping.pairs]
     cols_b = [p.col_b for p in mapping.pairs]
-    key_idx = [i for i, p in enumerate(mapping.pairs) if p.is_key]
-    val_idx = [i for i, p in enumerate(mapping.pairs) if not p.is_key]
+    if mapping.key_mode == "content":
+        key_idx = list(range(len(mapping.pairs)))  # 全列がキー
+        val_idx: list[int] = []
+    else:
+        key_idx = [i for i, p in enumerate(mapping.pairs) if p.is_key]
+        val_idx = [i for i, p in enumerate(mapping.pairs) if not p.is_key]
 
     proj_a = _project(table_a, cols_a)
     proj_b = _project(table_b, cols_b)
+
+    if mapping.key_mode == "row_number":
+        return DiffResult(
+            mapping=mapping, options=options,
+            rows=_diff_by_row_number(proj_a, proj_b, mapping, normalizer,
+                                     options, cols_a, cols_b),
+            duplicates_a=[], duplicates_b=[],
+            empty_key_a=0, empty_key_b=0,
+            name_a=table_a.name, name_b=table_b.name,
+        )
 
     def build_index(rows: list[list[str]]):
         index: dict[tuple[str, ...], list[int]] = {}

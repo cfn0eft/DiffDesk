@@ -118,6 +118,13 @@ class ColumnPair:
 @dataclass
 class MappingConfig:
     pairs: list[ColumnPair]
+    # 紐づけキーの方式:
+    #   "columns"    = キー指定した列で結合(従来・既定)
+    #   "row_number" = 行番号で比較(上から順に1行ずつ突き合わせ)
+    #   "content"    = 行の内容で比較(全列一致した行同士を対応付け)
+    key_mode: str = "columns"
+
+    KEY_MODES = ("columns", "row_number", "content")
 
     @property
     def key_pairs(self) -> list[ColumnPair]:
@@ -130,8 +137,12 @@ class MappingConfig:
     def validate(self, columns_a: list[str], columns_b: list[str]) -> None:
         if not self.pairs:
             raise DiffDeskError("列マッピングが空です。少なくとも1組の対応付けが必要です。")
-        if not self.key_pairs:
-            raise DiffDeskError("キー列が指定されていません。1組以上のペアにキー指定が必要です。")
+        if self.key_mode not in self.KEY_MODES:
+            raise DiffDeskError(f"キー方式が不正です: {self.key_mode}")
+        if self.key_mode == "columns" and not self.key_pairs:
+            raise DiffDeskError(
+                "キー列が指定されていません。1組以上のペアにキー指定をするか、"
+                "キー方式を「行番号」「行の内容」に変更してください。")
         seen: set[tuple[str, str]] = set()
         for p in self.pairs:
             if p.col_a not in columns_a:
@@ -143,11 +154,13 @@ class MappingConfig:
             seen.add((p.col_a, p.col_b))
 
     def to_dict(self) -> dict:
-        return {"pairs": [p.to_dict() for p in self.pairs]}
+        return {"pairs": [p.to_dict() for p in self.pairs],
+                "key_mode": self.key_mode}
 
     @classmethod
     def from_dict(cls, d: dict) -> "MappingConfig":
-        return cls(pairs=[ColumnPair.from_dict(p) for p in d.get("pairs", [])])
+        return cls(pairs=[ColumnPair.from_dict(p) for p in d.get("pairs", [])],
+                   key_mode=str(d.get("key_mode", "columns") or "columns"))
 
 
 @dataclass

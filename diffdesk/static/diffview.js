@@ -248,7 +248,9 @@ $("#btn-export-verify-csv").onclick = () => {
 
 function renderStatusbar() {
   const d = state.diff;
-  const keys = d.columns_a.filter((c, i) => d.key_flags[i]);
+  const keys = d.key_mode === "row_number" ? ["行番号(上から順)"]
+    : d.key_mode === "content" ? ["行の内容(全列一致)"]
+    : d.columns_a.filter((c, i) => d.key_flags[i]);
   const norms = [];
   if ($("#opt-trim").checked) norms.push("空白除去");
   if ($("#opt-width").checked) norms.push("全半角同一視");
