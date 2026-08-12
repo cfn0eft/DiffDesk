@@ -10,6 +10,15 @@
 <body>
 <header>
   <h1><img src="/static/icon.svg" alt="" class="applogo">DiffDesk <span class="tagline">― CSV比較・編集</span><span class="ver" title="実行中のバージョン">v{{V}}</span></h1>
+  <div class="header-tools">
+    <label class="proj-box" title="案件ごとに既知差分・照合履歴・手動紐づけ・ユーザー辞書が分かれて保存されます">案件
+      <select id="project-select"></select>
+    </label>
+    <button id="project-new" class="mini" title="新しい案件を作成して切り替える">＋新規</button>
+    <button id="undo-btn" class="mini" title="直前の登録・削除を取り消す(既知差分・手動紐づけ・ユーザー辞書)">↩ 元に戻す</button>
+    <a id="update-badge" class="update-badge" href="https://github.com/cfn0eft/DiffDesk/releases" target="_blank" rel="noopener" hidden></a>
+    <button id="help-btn" class="mini" title="使い方のクイックガイド">？ヘルプ</button>
+  </div>
   <nav id="tabs">
     <button data-tab="tab-load" class="active">1. ファイル読み込み</button>
     <button data-tab="tab-map">2. 紐づけ設定</button>

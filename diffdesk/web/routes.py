@@ -37,6 +37,12 @@ from ..core import (
     validate_manual_pair,
     clear_history,
     clear_known_diffs,
+    create_project,
+    delete_project,
+    list_projects,
+    peek_undo,
+    switch_project,
+    undo_last,
     column_diff_summary,
     load_history,
     load_known_diffs,
@@ -883,6 +889,73 @@ def apply_file_recipe(file_id: str, req: sc.RecipeApplyRequest):
     entry = store.get_file(file_id)
     entry.ops.extend(ops)
     return {"logs": logs, "preview": _preview(table)}
+
+
+# ---------------------------------------------------------------- 案件・アンドゥ・更新チェック
+@router.get("/projects")
+def get_projects():
+    return list_projects()
+
+
+@router.post("/projects")
+def post_project(req: sc.ProjectRequest):
+    return create_project(req.name)
+
+
+@router.post("/projects/switch")
+def post_project_switch(req: sc.ProjectRequest):
+    return switch_project(req.name)
+
+
+@router.delete("/projects/{name}")
+def delete_project_route(name: str):
+    return delete_project(name)
+
+
+@router.get("/undo")
+def get_undo():
+    return peek_undo()
+
+
+@router.post("/undo")
+def post_undo():
+    return {"label": undo_last()}
+
+
+_update_cache: dict = {"at": 0.0, "latest": None}
+
+
+def _fetch_latest_version() -> str | None:
+    """GitHubの最新Releaseタグを取得(vX.Y.Z → X.Y.Z)。失敗時はNone。"""
+    import json as _json
+    import urllib.request
+    req = urllib.request.Request(
+        "https://api.github.com/repos/cfn0eft/DiffDesk/releases/latest",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "DiffDesk"})
+    with urllib.request.urlopen(req, timeout=4) as r:
+        tag = _json.loads(r.read().decode("utf-8")).get("tag_name", "")
+    return tag.lstrip("v") or None
+
+
+@router.get("/update-check")
+def update_check():
+    """新しいバージョンの有無(1時間キャッシュ。オフラインなら latest=null)。"""
+    import time
+    from .. import __version__
+    now = time.time()
+    if now - _update_cache["at"] > 3600:
+        try:
+            _update_cache["latest"] = _fetch_latest_version()
+        except Exception:
+            _update_cache["latest"] = None
+        _update_cache["at"] = now
+
+    def _t(v: str) -> tuple:
+        return tuple(int(x) for x in v.split(".") if x.isdigit())
+
+    latest = _update_cache["latest"]
+    available = bool(latest) and _t(latest) > _t(__version__)
+    return {"current": __version__, "latest": latest, "update_available": available}
 
 
 # ---------------------------------------------------------------- 既知差分・履歴・辞書

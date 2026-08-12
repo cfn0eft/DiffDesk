@@ -433,3 +433,23 @@ tr.row-role-b td { background: #efeadb; }
 .rel-extra { background: #f7f2df; color: #6b5518; }
 .jx-c-u { background: #b5b0a4; }
 .req { color: #a33c34; font-size: 11px; font-weight: 700; }
+
+/* ヘッダーのツール(案件・アンドゥ・更新・ヘルプ) */
+.header-tools {
+  display: flex; align-items: center; gap: 6px;
+  margin-left: auto; margin-right: 12px; flex-wrap: wrap;
+}
+.proj-box { font-size: 12px; color: #d8d5cb; display: flex; align-items: center; gap: 4px; }
+.proj-box select {
+  max-width: 180px; font-size: 12px; padding: 2px 4px;
+  background: #f4f2ea; border: 1px solid var(--border-strong);
+}
+.header-tools .mini {
+  background: #4a544a; color: #e8e5da; border: 1px solid #5f6a5f;
+}
+.header-tools .mini:hover { background: #5a655a; }
+.update-badge {
+  font-size: 12px; padding: 3px 8px; border-radius: 3px;
+  background: #b3872c; color: #fff; text-decoration: none; font-weight: 600;
+}
+.update-badge:hover { background: #c79939; }

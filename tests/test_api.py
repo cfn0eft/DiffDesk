@@ -808,3 +808,53 @@ class TestV0140KeyMode:
     def test_default_key_mode_in_response(self, client):
         _, body = TestDiffFlow().run_diff(client)
         assert body["key_mode"] == "columns"
+
+
+class TestV0160ProjectsUndo:
+    def test_projects_crud(self, client):
+        r = client.get("/api/projects").json()
+        assert r["current"] == "既定"
+        r = client.post("/api/projects", json={"name": "案件A"}).json()
+        assert r["current"] == "案件A"
+        r = client.post("/api/projects/switch", json={"name": "既定"}).json()
+        assert r["current"] == "既定"
+        r = client.delete("/api/projects/案件A").json()
+        assert "案件A" not in r["names"]
+        assert client.post("/api/projects", json={"name": ""}).status_code == 400
+        assert client.delete("/api/projects/既定").status_code == 400
+
+    def test_known_diffs_isolated_by_project(self, client):
+        client.post("/api/known-diffs", json={"entry": {
+            "type": "value", "col_a": "c", "value_a": "1", "value_b": "1.0"}})
+        assert len(client.get("/api/known-diffs").json()["entries"]) == 1
+        client.post("/api/projects", json={"name": "別案件"})
+        assert client.get("/api/known-diffs").json()["entries"] == []
+        client.post("/api/projects/switch", json={"name": "既定"})
+        assert len(client.get("/api/known-diffs").json()["entries"]) == 1
+
+    def test_undo_endpoint(self, client):
+        assert client.get("/api/undo").json()["count"] == 0
+        assert client.post("/api/undo").status_code == 400
+        client.post("/api/known-diffs", json={"entry": {
+            "type": "value", "col_a": "c", "value_a": "1", "value_b": "1.0"}})
+        peek = client.get("/api/undo").json()
+        assert peek["count"] == 1 and "既知差分" in peek["label"]
+        r = client.post("/api/undo").json()
+        assert "既知差分" in r["label"]
+        assert client.get("/api/known-diffs").json()["entries"] == []
+
+    def test_update_check(self, client, monkeypatch):
+        import diffdesk.web.routes as routes_mod
+        from diffdesk import __version__
+        monkeypatch.setattr(routes_mod, "_fetch_latest_version", lambda: "99.0.0")
+        monkeypatch.setitem(routes_mod._update_cache, "at", 0.0)
+        r = client.get("/api/update-check").json()
+        assert r["current"] == __version__
+        assert r["latest"] == "99.0.0" and r["update_available"] is True
+        # オフライン(取得失敗)でも壊れない
+        def boom():
+            raise OSError("offline")
+        monkeypatch.setattr(routes_mod, "_fetch_latest_version", boom)
+        monkeypatch.setitem(routes_mod._update_cache, "at", 0.0)
+        r = client.get("/api/update-check").json()
+        assert r["latest"] is None and r["update_available"] is False

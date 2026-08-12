@@ -1180,3 +1180,9 @@ $("#btn-merge").onclick = async () => {
     refreshFileList();
   } catch (e) { toast(e.message, true); }
 };
+
+// 案件切替・アンドゥなどでワークスペースが変わったら表示を更新する
+document.addEventListener("diffdesk:workspace-changed", () => {
+  loadHistory();
+  refreshAfterKnownChange();
+});
