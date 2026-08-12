@@ -213,6 +213,7 @@
         <button class="statusfilter active" data-status="">全て</button>
         <button class="statusfilter" data-status="only_a">Aのみ</button>
         <button class="statusfilter" data-status="only_b">Bのみ</button>
+        <button class="statusfilter" data-status="only_a,only_b" title="未対応(Aのみ+Bのみ)だけを表示。左右分割では左=Aのみ・右=Bのみを詰めて並べ、行数が多くても紐づけしやすくなります">未対応</button>
         <button class="statusfilter" data-status="changed">変更</button>
         <button class="statusfilter" data-status="same">一致</button>
         <span class="spacer"></span>
@@ -260,7 +261,16 @@
             <option value="0.6" selected>60%以上</option>
             <option value="0.4">40%以上</option>
           </select></label>
-        <button id="suggest-accept-high" title="一致率90%以上の候補をまとめて登録します(確認画面なし)">90%以上を一括承認</button>
+        <label>一括承認のしきい値
+          <select id="suggest-accept-th">
+            <option value="1">100%のみ</option>
+            <option value="0.95">95%以上</option>
+            <option value="0.9" selected>90%以上</option>
+            <option value="0.8">80%以上</option>
+            <option value="0.7">70%以上</option>
+            <option value="0.6">60%以上</option>
+          </select></label>
+        <button id="suggest-accept-high" title="選んだ一致率以上の候補をまとめて登録します(件数の確認あり)">この一致率以上を一括承認</button>
         <span id="suggest-info" class="hint"></span>
       </div>
       <div id="suggest-list"></div>
