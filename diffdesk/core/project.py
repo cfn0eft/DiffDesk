@@ -115,3 +115,88 @@ def delete_project(name: str, *, root: Path | None = None) -> dict:
     if d.exists():
         shutil.rmtree(d)
     return cfg
+
+
+# ---------------------------------------------------------------- 持ち出し(エクスポート/インポート)
+_EXPORT_FILES = ("known_diffs.json", "manual_links.json", "user_dict.json",
+                 "notes.json", "history.json", "audit.jsonl", "projects.json")
+_EXPORT_DIRS = ("snapshots", "sessions")
+
+
+def export_project(*, root: Path | None = None) -> tuple[str, bytes]:
+    """現在の案件のデータ一式をzipにする。(案件名, zipバイト列) を返す。"""
+    import io
+    import json as _json
+    import zipfile
+    from datetime import datetime
+
+    cfg = _load(root)
+    name = cfg["current"]
+    d = data_dir(name, root=root)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("diffdesk_project.json", _json.dumps({
+            "name": name,
+            "exported_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "format": 1,
+        }, ensure_ascii=False))
+        for fn in _EXPORT_FILES:
+            if fn == "projects.json":
+                continue  # 案件一覧そのものは含めない
+            path = d / fn
+            if path.exists():
+                z.writestr(fn, path.read_bytes())
+        for sub in _EXPORT_DIRS:
+            subdir = d / sub
+            if subdir.is_dir():
+                for f in sorted(subdir.iterdir()):
+                    if f.is_file():
+                        z.writestr(f"{sub}/{f.name}", f.read_bytes())
+    return name, buf.getvalue()
+
+
+def import_project(data: bytes, *, root: Path | None = None) -> dict:
+    """案件zipを新しい案件として取り込み、切り替える。
+
+    既存案件は上書きしない(同名なら「名前(2)」のように別名を付ける)。
+    """
+    import io
+    import json as _json
+    import zipfile
+
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        raise DiffDeskError("案件ファイル(zip)として読み込めませんでした。")
+    try:
+        meta = _json.loads(z.read("diffdesk_project.json").decode("utf-8"))
+    except KeyError:
+        raise DiffDeskError("DiffDeskの案件ファイルではありません(diffdesk_project.json がありません)。")
+
+    base = str(meta.get("name") or "取り込んだ案件").strip() or "取り込んだ案件"
+    cfg = _load(root)
+    name = base
+    n = 2
+    while name in cfg["names"] or (
+            name != DEFAULT_NAME and any(
+                _safe_dirname(name) == _safe_dirname(x)
+                for x in cfg["names"] if x != DEFAULT_NAME)):
+        name = f"{base}({n})"
+        n += 1
+    create_project(name, root=root)
+    d = data_dir(name, root=root)
+
+    allowed = set(_EXPORT_FILES) - {"projects.json"}
+    for info in z.infolist():
+        if info.is_dir():
+            continue
+        parts = Path(info.filename).parts
+        if ".." in parts or Path(info.filename).is_absolute():
+            continue  # 不正なパスは無視
+        if len(parts) == 1 and parts[0] in allowed:
+            (d / parts[0]).write_bytes(z.read(info))
+        elif len(parts) == 2 and parts[0] in _EXPORT_DIRS:
+            sub = d / parts[0]
+            sub.mkdir(parents=True, exist_ok=True)
+            (sub / parts[1]).write_bytes(z.read(info))
+    return {**_load(root), "imported": name}

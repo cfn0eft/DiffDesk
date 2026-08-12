@@ -115,7 +115,7 @@
       <input type="file" id="mapping-file-input" accept=".json,application/json" hidden>
     </div>
     <table class="mapping-table" id="mapping-table">
-      <thead><tr><th>A列(マスタ)</th><th></th><th>B列(比較対象)</th><th>キー</th><th>SF項目名(出力用)</th><th></th></tr></thead>
+      <thead><tr><th>A列(マスタ)</th><th></th><th>B列(比較対象)</th><th>キー</th><th>SF項目名(出力用)</th><th title="投入時の変換(値の対応表・日付・真偽値)をA側に再現適用して照合します">変換</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
     <p class="hint" id="key-mode-hint" hidden></p>
@@ -656,6 +656,16 @@
     <div id="health-warnings"></div>
     <div id="health-result"></div>
   </details>
+
+  <div class="card">
+    <h2>案件の持ち出し <span class="hint">(既知差分・手動紐づけ・辞書・注釈・履歴・セッション・監査ログを1つのzipで受け渡し)</span></h2>
+    <div class="toolbar">
+      <button id="btn-project-export" class="primary">現在の案件をエクスポート(zip)</button>
+      <label class="filebtn" style="text-decoration:none"><button class="mini" style="pointer-events:none">案件zipをインポート</button>
+        <input type="file" id="project-import-input" accept=".zip" hidden></label>
+      <span class="hint">インポートは新しい案件として追加されます(既存の案件は上書きしません)</span>
+    </div>
+  </div>
 
   <div class="card">
     <h2>3ファイル比較(多段トレース) <span class="hint">(原本→加工→最終のどの段階で値が変わったかを特定。キー以外の列は名前で自動対応)</span></h2>
