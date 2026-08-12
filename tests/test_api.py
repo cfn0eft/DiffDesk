@@ -932,3 +932,17 @@ class TestV0180AuditPack:
         z = zipfile.ZipFile(io.BytesIO(r.content))
         assert "はじめにお読みください.txt" in z.namelist()
         assert "検証レポート.xlsx" in z.namelist()
+
+
+class TestV0191HelpPage:
+    def test_help_page_served(self, client):
+        r = client.get("/help")
+        assert r.status_code == 200
+        text = r.text
+        assert "DiffDesk ヘルプ" in text
+        from diffdesk import __version__
+        assert f"v{__version__}" in text  # {{V}}が置換されている
+        # 主要セクションが揃っている
+        for anchor in ("はじめに", "既知差分", "手動紐づけ", "検証パック",
+                       "ショートカット", "よくある質問", "多対多検証"):
+            assert anchor in text, anchor
