@@ -557,7 +557,10 @@ def run_diff(req: sc.DiffRequest):
         "duplicates_b": [list(k) for k in result.duplicates_b[:100]],
         "columns_a": [p.col_a for p in mapping.pairs],
         "columns_b": [p.col_b for p in mapping.pairs],
-        "key_flags": [p.is_key for p in mapping.pairs],
+        # キーなし比較では列の🔑表示は意味を持たないので落とす
+        "key_flags": [p.is_key if mapping.key_mode == "columns" else False
+                      for p in mapping.pairs],
+        "key_mode": mapping.key_mode,
     }
 
 

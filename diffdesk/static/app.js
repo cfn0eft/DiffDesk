@@ -459,7 +459,7 @@ function renderMappingTable() {
     <td>↔</td>
     <td><select data-i="${i}" data-f="col_b">${colOptions(colsB, p.col_b)}</select>
       ${p.transform ? `<div class="hint transform-badge" title="移行定義JSONの変換ルールをA側に再現適用して照合します">🔁 ${escapeHtml(transformSummary(p.transform))}</div>` : ""}</td>
-    <td style="text-align:center"><input type="checkbox" data-i="${i}" data-f="is_key" ${p.is_key ? "checked" : ""}></td>
+    <td style="text-align:center"><input type="checkbox" data-i="${i}" data-f="is_key" ${p.is_key ? "checked" : ""} ${$("#key-mode").value !== "columns" ? "disabled" : ""}></td>
     <td><input data-i="${i}" data-f="sf_field" value="${escapeHtml(p.sf_field || "")}" placeholder="${escapeHtml(p.col_b)}" size="18" title="Data Loader出力時のSalesforce項目名。親レコードを外部IDで参照する場合は Account:ExtId__c の形式で指定できます"></td>
     <td><button class="mini danger" data-del="${i}">×</button></td>
   </tr>`).join("");
@@ -672,7 +672,7 @@ $("#btn-mapping-export").onclick = () => {
     name: $("#profile-name").value.trim() || "mapping",
     mapping: { pairs: state.mapping.map(p => ({
       col_a: p.col_a, col_b: p.col_b, is_key: p.is_key, sf_field: p.sf_field,
-    })) },
+    })), key_mode: $("#key-mode").value },
     options: currentOptions(),
     row_filter: { conditions_a: state.filtersA, conditions_b: state.filtersB },
     external_id: state.mapping.find(p => p.is_key)?.col_a || null,
@@ -732,7 +732,7 @@ $("#btn-profile-save").onclick = async () => {
     await postJson("/api/profiles", {
       profile: {
         name,
-        mapping: { pairs: state.mapping },
+        mapping: { pairs: state.mapping, key_mode: $("#key-mode").value },
         options: currentOptions(),
         row_filter: { conditions_a: state.filtersA, conditions_b: state.filtersB },
         external_id: state.mapping.find(p => p.is_key)?.col_a || null,
@@ -749,6 +749,8 @@ $("#btn-profile-load").onclick = async () => {
   try {
     const { profile } = await apiJson(`/api/profiles/${encodeURIComponent(name)}`);
     state.mapping = profile.mapping.pairs;
+    $("#key-mode").value = profile.mapping.key_mode || "columns";
+    onKeyModeChange();
     state.filtersA = profile.row_filter?.conditions_a || [];
     state.filtersB = profile.row_filter?.conditions_b || [];
     applyOptions(profile.options || {});
@@ -767,16 +769,34 @@ $("#btn-profile-delete").onclick = async () => {
   toast("削除しました");
 };
 
+// ---------------------------------------------------------------- キー方式
+const KEY_MODE_HINTS = {
+  columns: "",
+  row_number: "行番号で比較: 両ファイルを上から順に1行ずつ突き合わせます(並び順が同じデータ向け)。キー列のチェックは使いません。行の追加・削除があると以降がずれて見えます。",
+  content: "行の内容で比較: 全列が一致した行同士を対応付け、それ以外は「Aのみ」「Bのみ」になります(変更セルの検出はありません)。同一内容の重複行は照合対象外として警告されます。",
+};
+
+export function onKeyModeChange() {
+  const mode = $("#key-mode").value;
+  const hint = $("#key-mode-hint");
+  hint.hidden = !KEY_MODE_HINTS[mode];
+  hint.textContent = KEY_MODE_HINTS[mode] || "";
+  renderMappingTable();
+}
+$("#key-mode").onchange = onKeyModeChange;
+
 // ---------------------------------------------------------------- 差分実行
 async function runDiff() {
   if (!state.fileA || !state.fileB) return toast("ファイルAとBを読み込んでください", true);
   if (!state.mapping.length) return toast("列マッピングを設定してください", true);
-  if (!state.mapping.some(p => p.is_key)) return toast("キー列を1つ以上指定してください", true);
+  if ($("#key-mode").value === "columns" && !state.mapping.some(p => p.is_key)) {
+    return toast("キー列が指定されていません。キー☑を付けるか、キー方式を「行番号」「行の内容」に変更してください", true);
+  }
   try {
     const body = {
       file_a: state.fileA.file_id,
       file_b: state.fileB.file_id,
-      mapping: { pairs: state.mapping },
+      mapping: { pairs: state.mapping, key_mode: $("#key-mode").value },
       options: currentOptions(),
       row_filter: { conditions_a: state.filtersA, conditions_b: state.filtersB },
     };
@@ -794,9 +814,9 @@ $("#btn-omakase").onclick = async () => {
   try {
     const n = await doAutomap();
     if (!n) { switchTab("tab-map"); return; }
-    if (!state.mapping.some(p => p.is_key)) {
+    if ($("#key-mode").value === "columns" && !state.mapping.some(p => p.is_key)) {
       switchTab("tab-map");
-      return toast("キー列を自動で決められませんでした。キーにチェックを入れて「差分を実行」してください。", true);
+      return toast("キー列を自動で決められませんでした。キーにチェックを入れるか、紐づけキーを「行番号」「行の内容」に変更して「差分を実行」してください。", true);
     }
     await runDiff();
   } catch (e) { toast(e.message, true); }
