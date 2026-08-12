@@ -1040,3 +1040,56 @@ class TestV0210PrevCompare:
         assert r.status_code == 200
         msgs = " / ".join(c["message"] for c in r.json()["checks"])
         assert "B側に重複" in msgs
+
+
+class TestV0220RefPiiAi:
+    def test_refcheck_and_export(self, client):
+        fc = upload(client, "child.csv",
+                    "id,dept\n1,D01\n2,D99\n3,\n".encode("utf-8"))["file_id"]
+        fm = upload(client, "master.csv",
+                    "code\nD01\nD02\n".encode("utf-8"))["file_id"]
+        body = {"file_child": fc, "col_child": "dept",
+                "file_master": fm, "col_master": "code"}
+        r = client.post("/api/refcheck", json=body).json()
+        assert r["missing"] == 1 and r["blank"] == 1 and r["matched"] == 1
+        r = client.post("/api/export/refcheck", json=body)
+        assert r.status_code == 200
+        text = r.content.decode("utf-8-sig")
+        assert "D99" in text and "エラー理由" in text
+
+    def make_gender_diff(self, client):
+        fa = upload(client, "a.csv",
+                    "id,氏名,性別\n1,山田,男\n2,佐藤,女\n".encode("utf-8"))["file_id"]
+        fb = upload(client, "b.csv",
+                    "id,氏名,性別\n1,山田,Male\n2,佐藤,Female\n".encode("utf-8"))["file_id"]
+        r = client.post("/api/diff", json={
+            "file_a": fa, "file_b": fb,
+            "mapping": {"pairs": [{"col_a": "id", "col_b": "id", "is_key": True},
+                                  {"col_a": "氏名", "col_b": "氏名"},
+                                  {"col_a": "性別", "col_b": "性別"}]}})
+        return r.json()["diff_id"]
+
+    def test_pii_endpoint(self, client):
+        diff_id = self.make_gender_diff(client)
+        r = client.get(f"/api/diff/{diff_id}/pii").json()
+        assert {"column": "氏名", "kind": "氏名"} in r["columns"]
+
+    def test_ai_sort_roundtrip(self, client):
+        diff_id = self.make_gender_diff(client)
+        r = client.get(f"/api/diff/{diff_id}/known-prompt").json()
+        assert r["count"] == 2 and "性別" in r["prompt"]
+        ans = '[{"no":1,"verdict":"known","reason":"変換"},{"no":2,"verdict":"known","reason":"変換"}]'
+        r = client.post(f"/api/diff/{diff_id}/known-answer", json={"text": ans}).json()
+        assert len(r["candidates"]) == 2
+        r = client.post(f"/api/diff/{diff_id}/known-bulk",
+                        json={"entries": r["candidates"] and [
+                            {"col": c["col"], "value_a": c["value_a"],
+                             "value_b": c["value_b"], "note": "AI承認"}
+                            for c in r["candidates"]]}).json()
+        assert r["registered"] == 2
+        # 登録後は照合で既知扱い
+        v = client.get(f"/api/diff/{diff_id}/verify").json()
+        assert v["passed"] is True
+        # アンドゥ1回で戻る
+        client.post("/api/undo")
+        assert client.get("/api/known-diffs").json()["entries"] == []

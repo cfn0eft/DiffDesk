@@ -52,7 +52,10 @@ from .classify import (
     value_rules_for_cause,
 )
 from .pack import build_verification_pack
+from .ai_assist import build_known_prompt, parse_known_answer
+from .pii import detect_pii_in_diff
 from .preflight import preflight
+from .refcheck import missing_rows_table, ref_check
 from .runsnap import compare_with_prev, prev_key_sets, save_run_snapshot
 from .project import (
     create_project,

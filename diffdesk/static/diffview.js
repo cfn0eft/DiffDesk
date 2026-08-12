@@ -880,9 +880,23 @@ $("#suggest-accept-high").onclick = async () => {
 };
 
 // ---------------------------------------------------------------- Web版AI連携(コピペ)
+async function piiGuardOk() {
+  // AIに貼るデータに個人情報らしき列があれば、コピー前に確認する
+  try {
+    const r = await (await api(`/api/diff/${state.diff.diff_id}/pii`)).json();
+    if (!r.columns.length) return true;
+    const names = r.columns.map(c => `${c.column}(${c.kind})`).join("、");
+    return window.confirm(
+      `⚠ 個人情報らしき列が含まれています: ${names}\n` +
+      `このままプロンプトをコピーすると、これらの値がAIに送るテキストに含まれます。\n` +
+      `所属のルールで問題ない場合のみ続行してください。続行しますか?`);
+  } catch { return true; }
+}
+
 $("#ai-prompt-copy").onclick = async () => {
   const d = state.diff;
   if (!d) return toast("先に差分を実行してください。", true);
+  if (!await piiGuardOk()) return toast("コピーを中止しました。");
   try {
     const r = await (await api(`/api/diff/${d.diff_id}/link-prompt`)).json();
     try {
@@ -1329,3 +1343,71 @@ async function loadPrevCompare() {
     };
   } catch { /* 前回が無いだけなら何も出さない */ }
 }
+
+// ---------------------------------------------------------------- AIによる差異の仕分け(コピペ)
+let ai2Candidates = [];
+
+$("#ai2-prompt-copy").onclick = async () => {
+  const d = state.diff;
+  if (!d) return toast("先に差分を実行してください。", true);
+  if (!await piiGuardOk()) return toast("コピーを中止しました。");
+  try {
+    const r = await (await api(`/api/diff/${d.diff_id}/known-prompt`)).json();
+    try {
+      await navigator.clipboard.writeText(r.prompt);
+      $("#ai2-info").textContent = `${r.count}種の差異を含むプロンプトをコピーしました。`;
+      toast("仕分けプロンプトをコピーしました。");
+    } catch {
+      showDialog(`<h2>仕分けプロンプト(手動でコピーしてください)</h2>
+        <textarea rows="14" style="width:96%; margin:0 12px">${escapeHtml(r.prompt)}</textarea>
+        <div class="toolbar"><button data-cancel class="primary">閉じる</button></div>`);
+    }
+  } catch (e) { toast(e.message, true); }
+};
+
+$("#ai2-import").onclick = async () => {
+  const d = state.diff;
+  if (!d) return;
+  try {
+    const r = await postJson(`/api/diff/${d.diff_id}/known-answer`,
+      { text: $("#ai2-answer").value });
+    ai2Candidates = r.candidates;
+    $("#ai2-rejected").textContent = r.rejected.length
+      ? `取り込めなかった項目: ${r.rejected.join(" / ")}` : "";
+    if (!r.candidates.length) {
+      $("#ai2-list").innerHTML =
+        `<p class="hint">既知候補はありませんでした(real判定: ${r.real}件)。</p>`;
+      $("#ai2-register").hidden = true;
+      return;
+    }
+    $("#ai2-list").innerHTML =
+      `<p class="hint">AIがknown(容認できる差異)と判定した候補です。内容を確認し、チェックしたものだけ登録されます(real判定: ${r.real}件は対象外)。</p>` +
+      `<table><thead><tr><th></th><th>列</th><th>基準(A)</th><th>比較(B)</th><th>件数</th><th>AIの理由</th></tr></thead><tbody>` +
+      r.candidates.map((c, i) =>
+        `<tr><td><input type="checkbox" class="ai2-use" data-i="${i}" checked></td>` +
+        `<td>${escapeHtml(c.col)}</td><td>${escapeHtml(c.value_a)}</td>` +
+        `<td>${escapeHtml(c.value_b)}</td><td>${c.count}</td>` +
+        `<td class="hint">${escapeHtml(c.reason || "")}</td></tr>`).join("") +
+      `</tbody></table>`;
+    $("#ai2-register").hidden = false;
+  } catch (e) { toast(e.message, true); }
+};
+
+$("#ai2-register").onclick = async () => {
+  const chosen = $$(".ai2-use:checked").map(cb => ai2Candidates[+cb.dataset.i]);
+  if (!chosen.length) return toast("登録する候補にチェックを入れてください", true);
+  if (!window.confirm(`${chosen.length}種の値ルールを既知として登録します。よろしいですか?\n※「↩ 元に戻す」1回で取り消せます`)) return;
+  try {
+    const r = await postJson(`/api/diff/${state.diff.diff_id}/known-bulk`, {
+      entries: chosen.map(c => ({
+        col: c.col, value_a: c.value_a, value_b: c.value_b,
+        note: `AI仕分けを承認: ${c.reason || ""}`.slice(0, 300),
+      })),
+    });
+    toast(`${r.registered}種を既知に登録しました`);
+    $("#ai2-list").innerHTML = "";
+    $("#ai2-register").hidden = true;
+    ai2Candidates = [];
+    refreshAfterKnownChange();
+  } catch (e) { toast(e.message, true); }
+};
