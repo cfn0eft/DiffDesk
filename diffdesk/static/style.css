@@ -498,3 +498,16 @@ main { padding-bottom: 46px; } /* 実行バーに隠れないように */
 .clschip.cls-real .cls-filter { border-color: var(--danger); color: var(--danger); font-weight: bold; }
 .clschip.cls-real .cls-filter.active { background: var(--danger); color: #fff; }
 #columns-summary .colsum.active { background: var(--accent); color: #fff; border-color: #2c362f; }
+
+/* 前回照合との比較 */
+#prev-compare { margin: 4px 0 8px; }
+.prev-filter.active { background: var(--accent); color: #fff; border-color: #2c362f; }
+.prev-filter.prev-new { border-color: var(--danger); color: var(--danger); font-weight: bold; }
+.prev-filter.prev-new.active { background: var(--danger); color: #fff; }
+
+/* プリフライト診断 */
+#preflight-box { margin-bottom: 4px; }
+#preflight-box .pf { font-size: 12px; margin: 2px 0; }
+#preflight-box .pf-ok::before { content: "✔ "; color: #2e6b28; }
+#preflight-box .pf-info::before { content: "ℹ "; color: #3a5f8a; }
+#preflight-box .pf-warn::before { content: "⚠ "; color: #a5732c; font-weight: bold; }

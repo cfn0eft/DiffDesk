@@ -109,9 +109,27 @@ async function assignRole(fileId, side) {
 }
 
 function updateNextSteps() {
-  $("#next-steps").hidden = !(state.fileA && state.fileB);
+  const ready = !!(state.fileA && state.fileB);
+  $("#next-steps").hidden = !ready;
   updateFlowBadges();
   updateRunBar();
+  if (ready) runPreflight();
+}
+
+// A/B選択時の事前診断(キー候補・重複・行数差など)
+let preflightSeq = 0;
+async function runPreflight() {
+  const seq = ++preflightSeq;
+  const box = $("#preflight-box");
+  try {
+    const r = await postJson("/api/preflight", {
+      file_a: state.fileA.file_id, file_b: state.fileB.file_id,
+    });
+    if (seq !== preflightSeq) return;  // 古い結果は捨てる
+    box.innerHTML = `<div class="hint" style="margin-bottom:2px"><b>事前診断:</b></div>` +
+      r.checks.map(c =>
+        `<div class="pf pf-${c.level}">${escapeHtml(c.message)}</div>`).join("");
+  } catch { box.innerHTML = ""; }
 }
 
 function renderAssignments() {

@@ -40,6 +40,10 @@ from ..core import (
     audit_table,
     classify_diff,
     classify_value_pair,
+    compare_with_prev,
+    preflight,
+    prev_key_sets,
+    save_run_snapshot,
     value_rules_for_cause,
     build_verification_pack,
     clear_history,
@@ -569,6 +573,7 @@ def run_diff(req: sc.DiffRequest):
     audit("照合実行",
           f"{result.name_a} vs {result.name_b}: 一致{v.same} 相違{v.changed} "
           f"Aのみ{v.only_a} Bのみ{v.only_b} 判定{'OK' if v.passed else 'NG'}")
+    save_run_snapshot(known_applied)
     return {
         "diff_id": diff_id,
         "summary": result.summary,
@@ -585,7 +590,7 @@ def run_diff(req: sc.DiffRequest):
 
 @router.get("/diff/{diff_id}/rows")
 def diff_rows(diff_id: str, status: str = "", offset: int = 0, limit: int = 200,
-              q: str = "", cause: str = "", col: str = ""):
+              q: str = "", cause: str = "", col: str = "", prev: str = ""):
     result = _diff_with_known(diff_id)
     statuses = set(status.split(",")) if status else None
     rows = [r for r in result.rows if statuses is None or r.status in statuses]
@@ -595,6 +600,10 @@ def diff_rows(diff_id: str, status: str = "", offset: int = 0, limit: int = 200,
         rows = [r for r in rows if r.status == "changed" and any(
             classify_value_pair(cd.value_a, cd.value_b) == cause
             for cd in r.cell_diffs)]
+    if prev in ("new", "continuing"):  # 前回比較フィルタ
+        sets = prev_key_sets(result)
+        keys = sets[prev] if sets else set()
+        rows = [r for r in rows if "/".join(r.key) in keys]
     if q:  # キー・値の部分一致検索
         ql = q.lower()
         rows = [r for r in rows
@@ -1118,6 +1127,19 @@ def delete_all_known_diffs():
 def diff_columns_summary(diff_id: str):
     result = _diff_with_known(diff_id)
     return {"columns": column_diff_summary(result)}
+
+
+@router.get("/diff/{diff_id}/compare-prev")
+def diff_compare_prev(diff_id: str):
+    """前回実行時のスナップショットと比較(新規/解消/継続の差異)。"""
+    return compare_with_prev(_diff_with_known(diff_id))
+
+
+@router.post("/preflight")
+def run_preflight(req: sc.PreflightRequest):
+    """A/B選択時の事前診断(キー候補・重複・行数差など)。"""
+    return {"checks": preflight(store.get_table(req.file_a),
+                                store.get_table(req.file_b))}
 
 
 @router.get("/diff/{diff_id}/classify")

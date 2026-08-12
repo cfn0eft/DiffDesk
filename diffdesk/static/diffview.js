@@ -10,6 +10,7 @@ let currentTotal = 0;
 let currentQuery = "";   // 検索(キー・値)
 let currentCause = "";   // 差異の原因(自動分類)
 let currentCol = "";     // 列フィルタ
+let currentPrev = "";    // 前回比較フィルタ(new / continuing)
 
 const STATUS_JA = { only_a: "Aのみ", only_b: "Bのみ", changed: "変更", same: "一致" };
 
@@ -50,11 +51,13 @@ export function renderDiff() {
   currentQuery = "";
   currentCause = "";
   currentCol = "";
+  currentPrev = "";
   $("#diff-search").value = "";
   $$(".statusfilter").forEach(b =>
     b.classList.toggle("active", b.dataset.status === ""));
   renderStatusbar();
   loadClassify();
+  loadPrevCompare();
   loadVerification();
   loadColumnsSummary();
   loadHistory();
@@ -285,7 +288,7 @@ async function loadRows() {
   try {
     const params = new URLSearchParams({
       status: currentStatus, offset: currentOffset, limit: PAGE_SIZE,
-      q: currentQuery, cause: currentCause, col: currentCol,
+      q: currentQuery, cause: currentCause, col: currentCol, prev: currentPrev,
     });
     const res = await (await api(`/api/diff/${d.diff_id}/rows?${params}`)).json();
     currentTotal = res.total;
@@ -1287,4 +1290,42 @@ async function loadClassify() {
       loadRows();
     }, 300);
   });
+}
+
+// ---------------------------------------------------------------- 前回照合との比較
+async function loadPrevCompare() {
+  const d = state.diff;
+  if (!d) return;
+  const box = $("#prev-compare");
+  box.innerHTML = "";
+  try {
+    const r = await (await api(`/api/diff/${d.diff_id}/compare-prev`)).json();
+    if (!r.available) return;
+    const c = r.counts;
+    const chip = (label, n, kind, cls) =>
+      `<button class="mini prev-filter ${cls || ""}" data-prev="${kind}" ` +
+      `title="クリックで絞り込み(再クリックで解除)">${label} <b>${n}</b></button>`;
+    box.innerHTML = `<span class="hint">前回(${escapeHtml(r.prev_at)})との比較:</span> ` +
+      chip("🆕 新規差異", c.new, "new", c.new ? "prev-new" : "") + " " +
+      chip("継続", c.continuing, "continuing") + " " +
+      `<button class="mini" id="prev-resolved" title="前回問題だったが今回は解消した行の一覧">✔ 解消 <b>${c.resolved}</b></button>`;
+    $$(".prev-filter").forEach(b => b.onclick = () => {
+      const kind = b.dataset.prev;
+      currentPrev = currentPrev === kind ? "" : kind;
+      currentOffset = 0;
+      $$(".prev-filter").forEach(x =>
+        x.classList.toggle("active", x.dataset.prev === currentPrev));
+      loadRows();
+    });
+    $("#prev-resolved").onclick = () => {
+      const rows = r.resolved.map(x =>
+        `<tr><td>${escapeHtml(x.key)}</td><td>${STATUS_JA[x.status] || escapeHtml(x.status)}</td>` +
+        `<td>${escapeHtml(x.col)}${x.col ? ": " : ""}${escapeHtml(x.value_a)}${x.col ? " ↔ " : ""}${escapeHtml(x.value_b)}</td></tr>`).join("");
+      showDialog(`<h2>解消した差異(前回 ${escapeHtml(r.prev_at)} → 今回)</h2>
+        <div style="margin:0 12px; max-height:60vh; overflow:auto">
+        <table><thead><tr><th>キー</th><th>前回の状態</th><th>前回の差異(先頭)</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="3">なし</td></tr>`}</tbody></table></div>
+        <div class="toolbar"><button data-cancel class="primary">閉じる</button></div>`);
+    };
+  } catch { /* 前回が無いだけなら何も出さない */ }
 }
