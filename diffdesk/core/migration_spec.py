@@ -130,15 +130,18 @@ def build_junction_settings(specs: list[dict]) -> dict:
     if not b_ext:
         warnings.append(f"親B({b_col})の外部ID列が定義から特定できませんでした。手動で選択してください。")
 
-    b_pattern = b_repl = ""
-    rules = (pb or {}).get("transform") or {}
-    regex_rules = rules.get("regex_rules") or []
-    if regex_rules:
-        b_pattern = regex_rules[0]["pattern"]
-        b_repl = regex_rules[0]["replacement"]
+    def first_regex(pair, label):
+        rules = (pair or {}).get("transform") or {}
+        regex_rules = rules.get("regex_rules") or []
+        if not regex_rules:
+            return "", ""
         if len(regex_rules) > 1:
             warnings.append(
-                f"親Bの正規化ルールが{len(regex_rules)}件ありますが、先頭の1件のみ適用します。")
+                f"{label}の正規化ルールが{len(regex_rules)}件ありますが、先頭の1件のみ適用します。")
+        return regex_rules[0]["pattern"], regex_rules[0]["replacement"]
+
+    a_pattern, a_repl = first_regex(pa, "親A")
+    b_pattern, b_repl = first_regex(pb, "親B")
 
     required = junction["skip_if_blank"][0] if junction["skip_if_blank"] else ""
     if len(junction["skip_if_blank"]) > 1:
@@ -152,6 +155,8 @@ def build_junction_settings(specs: list[dict]) -> dict:
             "b_ext_col": b_ext,
             "j_key_col": junction["external_id_field"],
             "key_template": template,
+            "a_regex_pattern": a_pattern,
+            "a_regex_replacement": a_repl,
             "b_regex_pattern": b_pattern,
             "b_regex_replacement": b_repl,
             "required_col": required,

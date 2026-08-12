@@ -33,7 +33,10 @@ class JunctionConfig:
     j_key_col: str               # 中間抽出の複合キー列
     # 複合キー生成テンプレート({A} {B} を置換)
     key_template: str = "{A}-{B}"
-    # 親Bの正規化(任意の正規表現置換)
+    # 親A/親Bの正規化(任意の正規表現置換)。移行時に値を変換して登録した場合、
+    # その変換を再現する(例: 1550 を 1550.0 で登録 → ^(\d+)$ → \1.0)
+    a_regex_pattern: str = ""
+    a_regex_replacement: str = ""
     b_regex_pattern: str = ""
     b_regex_replacement: str = ""
     # スキップ条件: この列が空白の行は取り込み対象外(任意)
@@ -51,6 +54,8 @@ class JunctionConfig:
             b_ext_col=str(d.get("b_ext_col", "")),
             j_key_col=str(d.get("j_key_col", "")),
             key_template=str(d.get("key_template", "{A}-{B}") or "{A}-{B}"),
+            a_regex_pattern=str(d.get("a_regex_pattern", "")),
+            a_regex_replacement=str(d.get("a_regex_replacement", "")),
             b_regex_pattern=str(d.get("b_regex_pattern", "")),
             b_regex_replacement=str(d.get("b_regex_replacement", "")),
             required_col=str(d.get("required_col", "")),
@@ -66,11 +71,12 @@ class JunctionConfig:
         if "{A}" not in cfg.key_template or "{B}" not in cfg.key_template:
             raise DiffDeskError(
                 "複合キーの形式には {A} と {B} の両方を含めてください(例: REL-{A}-{B})。")
-        if cfg.b_regex_pattern:
-            try:
-                re.compile(cfg.b_regex_pattern)
-            except re.error as e:
-                raise DiffDeskError(f"親Bの正規化の正規表現が不正です: {e}")
+        for label, pat in (("親A", cfg.a_regex_pattern), ("親B", cfg.b_regex_pattern)):
+            if pat:
+                try:
+                    re.compile(pat)
+                except re.error as e:
+                    raise DiffDeskError(f"{label}の正規化の正規表現が不正です: {e}")
         return cfg
 
 
@@ -125,6 +131,12 @@ def verify_junction(source: Table, extract_a: Table | None,
     ieb = extract_b.col_index(config.b_ext_col) if extract_b is not None else None
     iej = extract_j.col_index(config.j_key_col)
 
+    def norm_a(v: str) -> str:
+        v = norm(v)
+        if config.a_regex_pattern:
+            v = re.sub(config.a_regex_pattern, config.a_regex_replacement, v)
+        return v
+
     def norm_b(v: str) -> str:
         v = norm(v)
         if config.b_regex_pattern:
@@ -138,7 +150,7 @@ def verify_junction(source: Table, extract_a: Table | None,
     skipped_required = 0
     skipped_empty_pair = 0
     for row in source.rows:
-        a_raw = norm(row[ia])
+        a_raw = norm_a(row[ia])
         b_raw = norm_b(row[ib])
         if a_raw:
             a_expected.add(a_raw)
@@ -155,7 +167,7 @@ def verify_junction(source: Table, extract_a: Table | None,
         j_expected.setdefault(jkey, (a_raw, b_raw))
 
     # ステップ1〜3: マクロ検証(親は抽出がある場合のみ)
-    step1 = (_macro("親A", a_expected, [r[iea] for r in extract_a.rows], norm)
+    step1 = (_macro("親A", a_expected, [r[iea] for r in extract_a.rows], norm_a)
              if extract_a is not None else None)
     step2 = (_macro("親B", b_expected, [r[ieb] for r in extract_b.rows], norm_b)
              if extract_b is not None else None)
@@ -164,7 +176,7 @@ def verify_junction(source: Table, extract_a: Table | None,
     step3["skipped_empty_pair"] = skipped_empty_pair
 
     # ステップ4: 未取込中間キーの原因切り分け
-    a_actual = ({norm(r[iea]) for r in extract_a.rows} - {""}
+    a_actual = ({norm_a(r[iea]) for r in extract_a.rows} - {""}
                 if extract_a is not None else None)
     b_actual = ({norm_b(r[ieb]) for r in extract_b.rows} - {""}
                 if extract_b is not None else None)
@@ -205,7 +217,7 @@ def verify_junction(source: Table, extract_a: Table | None,
             and a_actual is not None and b_actual is not None):
         ira = extract_j.col_index(config.j_ref_a_col)
         irb = extract_j.col_index(config.j_ref_b_col)
-        bad_a = sum(1 for r in extract_j.rows if norm(r[ira]) not in a_actual)
+        bad_a = sum(1 for r in extract_j.rows if norm_a(r[ira]) not in a_actual)
         bad_b = sum(1 for r in extract_j.rows if norm_b(r[irb]) not in b_actual)
         ref_errors = {"bad_ref_a": bad_a, "bad_ref_b": bad_b}
 
@@ -288,6 +300,8 @@ def _build_relations(j_expected: dict, j_actual: set[str],
 
 def infer_key_template(source: Table, extract_j: Table, *,
                        a_source_col: str, b_source_col: str, j_key_col: str,
+                       a_regex_pattern: str = "",
+                       a_regex_replacement: str = "",
                        b_regex_pattern: str = "",
                        b_regex_replacement: str = "",
                        options: DiffOptions | None = None,
@@ -299,14 +313,19 @@ def infer_key_template(source: Table, extract_j: Table, *,
     """
     norm = make_normalizer(options or DiffOptions())
 
-    def norm_b(v: str) -> str:
-        v = norm(v)
-        if b_regex_pattern:
-            try:
-                v = re.sub(b_regex_pattern, b_regex_replacement, v)
-            except re.error:
-                pass
-        return v
+    def regex_norm(pattern: str, replacement: str):
+        def f(v: str) -> str:
+            v = norm(v)
+            if pattern:
+                try:
+                    v = re.sub(pattern, replacement, v)
+                except re.error:
+                    pass
+            return v
+        return f
+
+    norm_a = regex_norm(a_regex_pattern, a_regex_replacement)
+    norm_b = regex_norm(b_regex_pattern, b_regex_replacement)
 
     ia = source.col_index(a_source_col)
     ib = source.col_index(b_source_col)
@@ -314,7 +333,7 @@ def infer_key_template(source: Table, extract_j: Table, *,
     pairs = []
     seen = set()
     for row in source.rows[: sample * 4]:
-        a, b = norm(row[ia]), norm_b(row[ib])
+        a, b = norm_a(row[ia]), norm_b(row[ib])
         if a and b and (a, b) not in seen:
             seen.add((a, b))
             pairs.append((a, b))
