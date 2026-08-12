@@ -251,6 +251,7 @@ function renderStatusbar() {
   if ($("#opt-trim").checked) norms.push("空白除去");
   if ($("#opt-width").checked) norms.push("全半角同一視");
   if ($("#opt-case").checked) norms.push("大小文字同一視");
+  if ($("#opt-numeric").checked) norms.push("数値同一視");
   if ($("#opt-tolerance").value) norms.push(`許容誤差${$("#opt-tolerance").value}`);
   const total = d.summary.only_a + d.summary.only_b + d.summary.changed + d.summary.same;
   $("#diff-statusbar").innerHTML =

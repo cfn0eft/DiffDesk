@@ -492,6 +492,7 @@ export function currentOptions() {
     trim: $("#opt-trim").checked,
     normalize_width: $("#opt-width").checked,
     ignore_case: $("#opt-case").checked,
+    normalize_numeric: $("#opt-numeric").checked,
     numeric_tolerance: tol === "" ? null : parseFloat(tol),
   };
 }
@@ -499,6 +500,7 @@ function applyOptions(o) {
   $("#opt-trim").checked = o.trim ?? true;
   $("#opt-width").checked = o.normalize_width ?? true;
   $("#opt-case").checked = o.ignore_case ?? false;
+  $("#opt-numeric").checked = o.normalize_numeric ?? true;
   $("#opt-tolerance").value = o.numeric_tolerance ?? "";
 }
 
@@ -738,7 +740,7 @@ function restorePrefs() {
   } catch { /* 壊れた保存値は無視 */ }
 }
 
-["#opt-trim", "#opt-width", "#opt-case", "#opt-tolerance",
+["#opt-trim", "#opt-width", "#opt-case", "#opt-numeric", "#opt-tolerance",
  "#convert-encoding", "#grid-export-encoding"].forEach(sel => {
   $(sel).addEventListener("change", savePrefs);
 });

@@ -95,8 +95,12 @@ def test_numeric_tolerance_option():
     a = Table(columns=["id", "額"], rows=[["1", "100.00"]])
     b = Table(columns=["id", "amt"], rows=[["1", "100"]])
     m = MappingConfig(pairs=[ColumnPair("id", "id", is_key=True), ColumnPair("額", "amt")])
-    assert diff_tables(a, b, m).summary["changed"] == 1
-    assert diff_tables(a, b, m, DiffOptions(numeric_tolerance=0.0)).summary["same"] == 1
+    # v0.9.1以降は既定で数値表記を同一視(100.00 = 100)
+    assert diff_tables(a, b, m).summary["same"] == 1
+    off = DiffOptions(normalize_numeric=False)
+    assert diff_tables(a, b, m, off).summary["changed"] == 1
+    tol = DiffOptions(normalize_numeric=False, numeric_tolerance=0.0)
+    assert diff_tables(a, b, m, tol).summary["same"] == 1
 
 
 def test_mapping_validation():

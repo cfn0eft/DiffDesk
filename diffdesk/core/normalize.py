@@ -1,12 +1,29 @@
 """比較用のセル値正規化。表示・出力には使わない。"""
 from __future__ import annotations
 
+import re
 import unicodedata
 from typing import Callable
 
 from .model import DiffOptions
 
 _WHITESPACE = " \t\r\n　"
+# 小数点を含む純粋な数値だけを対象にする(先頭ゼロのID等は小数点が無いので触らない)
+_DECIMAL = re.compile(r"[+-]?\d+\.\d*")
+
+
+def _canon_decimal(s: str) -> str:
+    """"1551.0"→"1551"、"1551.50"→"1551.5"。数値表記だけの差異を吸収する。
+
+    ExcelやSalesforceのエクスポートは数値項目を小数点付きで出力することがある。
+    小数点を含まない値("0001" 等のID)は一切変更しない。
+    """
+    if not _DECIMAL.fullmatch(s):
+        return s
+    s = s.rstrip("0").rstrip(".")
+    if s in ("", "-", "+", "-0", "+0"):
+        return "0"
+    return s
 
 
 def make_normalizer(opts: DiffOptions) -> Callable[[str], str]:
@@ -21,6 +38,8 @@ def make_normalizer(opts: DiffOptions) -> Callable[[str], str]:
             if opts.trim:
                 # NFKCで全角空白が半角空白になるため再トリム
                 s = s.strip(_WHITESPACE)
+        if opts.normalize_numeric:
+            s = _canon_decimal(s)
         if opts.ignore_case:
             s = s.casefold()
         return s
