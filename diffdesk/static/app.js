@@ -971,3 +971,72 @@ $("#help-btn").onclick = () => {
 };
 
 loadProjects();
+
+// ---------------------------------------------------------------- 作業セッションの保存/復元
+async function loadWorksessions() {
+  try {
+    const { sessions } = await apiJson("/api/worksessions");
+    $("#ws-list").innerHTML = sessions.length
+      ? `<table><thead><tr><th>名前</th><th>保存日時</th><th>ファイル</th><th>サイズ</th><th></th><th></th></tr></thead><tbody>` +
+        sessions.map(s =>
+          `<tr><td><b>${escapeHtml(s.name)}</b></td><td class="hint">${escapeHtml(s.saved_at)}</td>` +
+          `<td>${s.files.map(f => escapeHtml(f.filename) + (f.role ? `<span class="rolechip role-${f.role}">${f.role.toUpperCase()}</span>` : "")).join(", ")}</td>` +
+          `<td class="hint">${(s.size / 1024).toFixed(0)}KB</td>` +
+          `<td><button class="mini primary ws-restore" data-n="${escapeHtml(s.name)}">復元</button></td>` +
+          `<td><button class="mini danger ws-del" data-n="${escapeHtml(s.name)}">削除</button></td></tr>`
+        ).join("") + `</tbody></table>`
+      : `<p class="hint">保存済みのセッションはありません。</p>`;
+    $$(".ws-restore").forEach(b => b.onclick = () => restoreWorksession(b.dataset.n));
+    $$(".ws-del").forEach(b => b.onclick = async () => {
+      if (!window.confirm(`セッション「${b.dataset.n}」を削除しますか?`)) return;
+      await api(`/api/worksession/${encodeURIComponent(b.dataset.n)}`, { method: "DELETE" });
+      toast("セッションを削除しました");
+      loadWorksessions();
+    });
+  } catch { /* 一覧のみの機能なので失敗は無視 */ }
+}
+
+$("#ws-save").onclick = async () => {
+  const name = $("#ws-name").value.trim();
+  if (!name) return toast("セッション名を入力してください", true);
+  try {
+    const meta = await postJson("/api/worksession/save", {
+      name,
+      file_a: state.fileA?.file_id || "",
+      file_b: state.fileB?.file_id || "",
+      mapping: { pairs: state.mapping, key_mode: $("#key-mode").value },
+      options: currentOptions(),
+      row_filter: { conditions_a: state.filtersA, conditions_b: state.filtersB },
+    });
+    toast(`セッション「${meta.name}」を保存しました(${meta.files.length}ファイル)`);
+    loadWorksessions();
+  } catch (e) { toast(e.message, true); }
+};
+
+async function restoreWorksession(name) {
+  try {
+    const r = await postJson("/api/worksession/restore", { name });
+    await refreshFileList();
+    refreshGridFileList();
+    if (r.role_a) await assignRole(r.role_a, "a");
+    if (r.role_b) await assignRole(r.role_b, "b");
+    state.mapping = r.mapping?.pairs || [];
+    $("#key-mode").value = r.mapping?.key_mode || "columns";
+    onKeyModeChange();
+    state.filtersA = r.row_filter?.conditions_a || [];
+    state.filtersB = r.row_filter?.conditions_b || [];
+    applyOptions(r.options || {});
+    rebuildMappingSelects();
+    renderFilters();
+    $("#ws-name").value = r.name || name;
+    toast(`セッション「${name}」を復元しました`);
+    // マッピングとA/Bが揃っていれば差分まで自動実行
+    if (state.fileA && state.fileB && state.mapping.length) {
+      const keyless = $("#key-mode").value !== "columns";
+      if (keyless || state.mapping.some(p => p.is_key)) await runDiff();
+    }
+  } catch (e) { toast(e.message, true); }
+}
+
+document.addEventListener("diffdesk:workspace-changed", loadWorksessions);
+loadWorksessions();
