@@ -70,7 +70,8 @@ class TestVerificationPack:
         names = set(z.namelist())
         assert names == {
             "はじめにお読みください.txt", "照合レポート.csv", "検証レポート.xlsx",
-            "共有用レポート.html", "既知差分.csv", "手動紐づけ.csv", "監査ログ.csv",
+            "共有用レポート.html", "既知差分.csv", "手動紐づけ.csv", "注釈.csv",
+            "監査ログ.csv",
         }
         readme = z.read("はじめにお読みください.txt").decode("utf-8-sig")
         assert "テスト案件" in readme and "v0.18.0" in readme

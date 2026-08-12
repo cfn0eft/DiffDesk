@@ -43,8 +43,12 @@ from ..core import (
     build_known_prompt,
     compare_with_prev,
     detect_pii_in_diff,
+    load_notes,
     missing_rows_table,
     parse_known_answer,
+    set_note,
+    trace_diff,
+    trace_table,
     preflight,
     ref_check,
     prev_key_sets,
@@ -1145,6 +1149,44 @@ def run_preflight(req: sc.PreflightRequest):
     """A/B選択時の事前診断(キー候補・重複・行数差など)。"""
     return {"checks": preflight(store.get_table(req.file_a),
                                 store.get_table(req.file_b))}
+
+
+@router.post("/trace")
+def run_trace(req: sc.TraceRequest):
+    """3ファイル比較(多段トレース): どの段階で値が変わったかを特定。"""
+    r = trace_diff(store.get_table(req.file_a), req.key_a,
+                   store.get_table(req.file_m), req.key_m,
+                   store.get_table(req.file_b), req.key_b)
+    r.pop("_all_rows", None)
+    audit("3ファイル比較", f"変化{r['changed']}件"
+          f"(A→M {r['by_stage']['a_m']} / M→B {r['by_stage']['m_b']})")
+    return r
+
+
+@router.post("/export/trace")
+def export_trace(req: sc.TraceRequest):
+    """多段トレース結果のCSVを出力する。"""
+    r = trace_diff(store.get_table(req.file_a), req.key_a,
+                   store.get_table(req.file_m), req.key_m,
+                   store.get_table(req.file_b), req.key_b)
+    names = [store.get_file(f).filename
+             for f in (req.file_a, req.file_m, req.file_b)]
+    return _download(write_csv(trace_table(r)),
+                     _report_name("多段トレース", *names, ext="csv"), "text/csv")
+
+
+@router.get("/notes")
+def get_notes():
+    return {"entries": load_notes()}
+
+
+@router.post("/notes")
+def post_note(req: sc.NoteRequest):
+    """行キーへの注釈を設定(textが空なら削除)。"""
+    entries = set_note(req.key, req.text)
+    if req.text.strip():
+        audit("注釈", f"{'/'.join(str(k) for k in req.key)}: {req.text[:50]}")
+    return {"entries": entries}
 
 
 @router.post("/refcheck")
