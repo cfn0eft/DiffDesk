@@ -512,11 +512,11 @@ function renderMappingTable() {
   const colsA = state.fileA?.preview.columns || [];
   const colsB = state.fileB?.preview.columns || [];
   if (!colsA.length || !colsB.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="hint">ファイルAとBを読み込むとここで対応付けできます。</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="hint">ファイルAとBを読み込むとここで対応付けできます。</td></tr>`;
     return;
   }
   if (!state.mapping.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="hint">「自動対応付け」または「＋ペアを追加」で対応付けを作成してください。</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="hint">「自動対応付け」または「＋ペアを追加」で対応付けを作成してください。</td></tr>`;
     return;
   }
   const METHOD_JA = { name: "名前", value: "値", "name+value": "名前+値" };
@@ -528,6 +528,7 @@ function renderMappingTable() {
       ${p.transform ? `<div class="hint transform-badge" title="移行定義JSONの変換ルールをA側に再現適用して照合します">🔁 ${escapeHtml(transformSummary(p.transform))}</div>` : ""}</td>
     <td style="text-align:center"><input type="checkbox" data-i="${i}" data-f="is_key" ${p.is_key ? "checked" : ""} ${$("#key-mode").value !== "columns" ? "disabled" : ""}></td>
     <td><input data-i="${i}" data-f="sf_field" value="${escapeHtml(p.sf_field || "")}" placeholder="${escapeHtml(p.col_b)}" size="18" title="Data Loader出力時のSalesforce項目名。親レコードを外部IDで参照する場合は Account:ExtId__c の形式で指定できます"></td>
+    <td style="text-align:center"><button class="mini ${p.transform ? "primary" : ""}" data-tf="${i}" title="${p.transform ? escapeHtml(transformSummary(p.transform)) : "投入時の変換ルールを設定"}">${p.transform ? "🔁" : "＋"}</button></td>
     <td><button class="mini danger" data-del="${i}">×</button></td>
   </tr>`).join("");
   tbody.querySelectorAll("select,input").forEach(el => {
@@ -547,6 +548,83 @@ function renderMappingTable() {
     state.mapping.splice(+b.dataset.del, 1);
     renderMappingTable();
   });
+  tbody.querySelectorAll("[data-tf]").forEach(b => b.onclick = () =>
+    openTransformDialog(+b.dataset.tf));
+}
+
+// ---------------------------------------------------------------- 変換ルールのGUI編集
+function openTransformDialog(i) {
+  const p = state.mapping[i];
+  const t = p.transform || {};
+  const type = t.truthy_values !== undefined ? "boolean" : (t.type || (t.value_map ? "picklist" : ""));
+  const vmText = t.value_map
+    ? Object.entries(t.value_map).map(([a, b]) => `${a} => ${b}`).join("\n") : "";
+  showDialog(`<h2>変換ルール — ${escapeHtml(p.col_a)} ↔ ${escapeHtml(p.col_b)}</h2>
+    <div style="margin:0 12px; max-height:65vh; overflow:auto">
+    <p class="hint">投入時にA側の値がどう変換されるかを設定します。照合時にA側へ再現適用してから比較します(1550→1550.0 のような数値・全半角は比較オプションで吸収されるため設定不要)。</p>
+    <label>変換の種類:
+      <select id="tf-type">
+        <option value="" ${type === "" ? "selected" : ""}>なし</option>
+        <option value="picklist" ${type === "picklist" ? "selected" : ""}>値の対応表(例: 男 → Male)</option>
+        <option value="date" ${type === "date" ? "selected" : ""}>日付(2020/1/5 = 2020-01-05 を同一視)</option>
+        <option value="boolean" ${type === "boolean" ? "selected" : ""}>真偽値化(指定値 → true、それ以外 → false)</option>
+      </select></label>
+    <div id="tf-picklist" ${type === "picklist" ? "" : "hidden"}>
+      <p style="margin:8px 0 2px"><b>値の対応表</b>(1行に1組、「A側の値 => B側の値」)</p>
+      <textarea id="tf-map" rows="6" style="width:96%" placeholder="男 => Male\n女 => Female">${escapeHtml(vmText)}</textarea>
+      <label style="display:block; margin-top:4px">対応表にない値の扱い:
+        <input id="tf-default" value="${escapeHtml(t.default_value ?? "")}" placeholder="(空欄=そのまま)" size="16"></label>
+    </div>
+    <div id="tf-boolean" ${type === "boolean" ? "" : "hidden"}>
+      <label style="display:block; margin-top:6px">true にする値(カンマ区切り):
+        <input id="tf-truthy" value="${escapeHtml((t.truthy_values || []).join(", "))}" placeholder="有, 1, はい" size="30"></label>
+    </div>
+    </div>
+    <div class="toolbar">
+      <button id="tf-clear" class="danger" ${p.transform ? "" : "hidden"}>変換を解除</button>
+      <span class="spacer"></span>
+      <button data-cancel>キャンセル</button>
+      <button id="tf-save" class="primary">保存</button>
+    </div>`);
+  const dlg = $("#dialog");
+  dlg.querySelector("[data-cancel]").onclick = () => dlg.close();
+  dlg.querySelector("#tf-type").onchange = () => {
+    const v = dlg.querySelector("#tf-type").value;
+    dlg.querySelector("#tf-picklist").hidden = v !== "picklist";
+    dlg.querySelector("#tf-boolean").hidden = v !== "boolean";
+  };
+  dlg.querySelector("#tf-clear").onclick = () => {
+    p.transform = null;
+    dlg.close();
+    renderMappingTable();
+    toast("変換ルールを解除しました。差分を再実行すると反映されます。");
+  };
+  dlg.querySelector("#tf-save").onclick = () => {
+    const v = dlg.querySelector("#tf-type").value;
+    if (!v) { p.transform = null; }
+    else if (v === "date") { p.transform = { type: "date" }; }
+    else if (v === "boolean") {
+      const truthy = dlg.querySelector("#tf-truthy").value
+        .split(",").map(s => s.trim()).filter(Boolean);
+      if (!truthy.length) return toast("true にする値を1つ以上入力してください", true);
+      p.transform = { type: "boolean", truthy_values: truthy };
+    } else {
+      const map = {};
+      for (const line of dlg.querySelector("#tf-map").value.split("\n")) {
+        if (!line.trim()) continue;
+        const idx = line.indexOf("=>");
+        if (idx === -1) return toast(`「A側の値 => B側の値」の形式で入力してください: ${line}`, true);
+        map[line.slice(0, idx).trim()] = line.slice(idx + 2).trim();
+      }
+      if (!Object.keys(map).length) return toast("対応表を1組以上入力してください", true);
+      p.transform = { type: "picklist", value_map: map };
+      const dv = dlg.querySelector("#tf-default").value;
+      if (dv !== "") p.transform.default_value = dv;
+    }
+    dlg.close();
+    renderMappingTable();
+    toast("変換ルールを保存しました。差分を再実行すると反映されます。");
+  };
 }
 
 $("#btn-add-pair").onclick = () => {
@@ -1226,4 +1304,28 @@ $("#btn-trace-export").onclick = async () => {
     });
     downloadResponse(res, "多段トレース.csv");
   } catch (e) { toast(e.message, true); }
+};
+
+// ---------------------------------------------------------------- 案件の持ち出し
+$("#btn-project-export").onclick = async () => {
+  try {
+    const res = await api("/api/projects/export");
+    downloadResponse(res, "案件.zip");
+    toast("現在の案件をエクスポートしました");
+  } catch (e) { toast(e.message, true); }
+};
+
+$("#project-import-input").onchange = async () => {
+  const file = $("#project-import-input").files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const cfg = await apiJson("/api/projects/import", { method: "POST", body: form });
+    toast(`案件「${cfg.imported}」として取り込み、切り替えました`);
+    await loadProjects();
+    document.dispatchEvent(new CustomEvent("diffdesk:workspace-changed"));
+    loadDictList();
+  } catch (e) { toast(e.message, true); }
+  $("#project-import-input").value = "";
 };

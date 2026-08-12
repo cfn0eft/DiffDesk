@@ -1120,3 +1120,40 @@ class TestV0230TraceNotes:
                             "updated_at": entries[0]["updated_at"]}]
         client.post("/api/notes", json={"key": ["0001"], "text": ""})
         assert client.get("/api/notes").json()["entries"] == []
+
+
+class TestV0240ProjectPortable:
+    def test_export_import_roundtrip(self, client):
+        client.post("/api/projects", json={"name": "移行案件"})
+        client.post("/api/known-diffs", json={"entry": {
+            "type": "value", "col_a": "c", "value_a": "1", "value_b": "1.0"}})
+        r = client.get("/api/projects/export")
+        assert r.status_code == 200
+        import urllib.parse as up
+        assert "案件_移行案件" in up.unquote(r.headers["content-disposition"])
+        raw = r.content
+        # インポート → 別名の新案件として追加・切替
+        r = client.post("/api/projects/import",
+                        files={"file": ("案件.zip", raw)})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["imported"] == "移行案件(2)"
+        assert body["current"] == "移行案件(2)"
+        assert len(client.get("/api/known-diffs").json()["entries"]) == 1
+
+    def test_import_invalid(self, client):
+        r = client.post("/api/projects/import",
+                        files={"file": ("x.zip", b"garbage")})
+        assert r.status_code == 400
+
+    def test_diff_with_gui_transform(self, client):
+        fa = upload(client, "a.csv", "id,性別\n1,男\n".encode("utf-8"))["file_id"]
+        fb = upload(client, "b.csv", "id,性別\n1,Male\n".encode("utf-8"))["file_id"]
+        r = client.post("/api/diff", json={
+            "file_a": fa, "file_b": fb,
+            "mapping": {"pairs": [
+                {"col_a": "id", "col_b": "id", "is_key": True},
+                {"col_a": "性別", "col_b": "性別",
+                 "transform": {"type": "picklist",
+                               "value_map": {"男": "Male"}}}]}})
+        assert r.json()["summary"]["same"] == 1

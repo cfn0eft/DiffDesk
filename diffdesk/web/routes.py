@@ -960,6 +960,24 @@ def post_project_switch(req: sc.ProjectRequest):
     return cfg
 
 
+@router.get("/projects/export")
+def project_export():
+    """現在の案件のデータ一式をzipでダウンロードする。"""
+    from ..core.project import export_project
+    name, raw = export_project()
+    audit("案件エクスポート", name)
+    return _download(raw, _report_name("案件", name, ext="zip"), "application/zip")
+
+
+@router.post("/projects/import")
+async def project_import(file: UploadFile = File(...)):
+    """案件zipを新しい案件として取り込む(既存は上書きしない)。"""
+    from ..core.project import import_project
+    cfg = import_project(await file.read())
+    audit("案件インポート", cfg.get("imported", ""))
+    return cfg
+
+
 @router.delete("/projects/{name}")
 def delete_project_route(name: str):
     return delete_project(name)
