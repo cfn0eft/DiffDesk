@@ -882,3 +882,92 @@ refreshFileList();
   if (b1) b1.onclick = openCompare;
   if (b2) b2.onclick = openCompare;
 }
+
+// ---------------------------------------------------------------- 案件切替
+async function loadProjects() {
+  try {
+    const cfg = await apiJson("/api/projects");
+    const sel = $("#project-select");
+    sel.innerHTML = cfg.names.map(n =>
+      `<option value="${escapeHtml(n)}" ${n === cfg.current ? "selected" : ""}>${escapeHtml(n)}</option>`).join("");
+  } catch { /* 表示のみの機能なので失敗は無視 */ }
+}
+
+$("#project-select").onchange = async () => {
+  const name = $("#project-select").value;
+  try {
+    await postJson("/api/projects/switch", { name });
+    toast(`案件「${name}」に切り替えました`);
+    document.dispatchEvent(new CustomEvent("diffdesk:workspace-changed"));
+    loadDictList();
+  } catch (e) { toast(e.message, true); loadProjects(); }
+};
+
+$("#project-new").onclick = async () => {
+  const name = window.prompt("新しい案件名(例: ○○試験 移行検証)");
+  if (!name) return;
+  try {
+    await postJson("/api/projects", { name });
+    await loadProjects();
+    toast(`案件「${name.trim()}」を作成して切り替えました`);
+    document.dispatchEvent(new CustomEvent("diffdesk:workspace-changed"));
+    loadDictList();
+  } catch (e) { toast(e.message, true); }
+};
+
+// ---------------------------------------------------------------- 統一アンドゥ
+$("#undo-btn").onclick = async () => {
+  try {
+    const r = await postJson("/api/undo", {});
+    toast(`元に戻しました: ${r.label}`);
+    document.dispatchEvent(new CustomEvent("diffdesk:workspace-changed"));
+    loadDictList();
+  } catch (e) { toast(e.message, true); }
+};
+$("#undo-btn").onmouseenter = async () => {
+  try {
+    const r = await apiJson("/api/undo");
+    $("#undo-btn").title = r.count
+      ? `直前の操作を取り消す: ${r.label}(残り${r.count}件)`
+      : "元に戻せる操作はありません";
+  } catch { /* ツールチップ用なので失敗は無視 */ }
+};
+
+// ---------------------------------------------------------------- 更新チェック
+(async () => {
+  try {
+    const r = await apiJson("/api/update-check");
+    if (r.update_available) {
+      const badge = $("#update-badge");
+      badge.textContent = `⬆ v${r.latest} が公開されています`;
+      badge.title = "クリックでリリースページを開く。更新コマンド:\n" +
+        'python -m pip install --upgrade "diffdesk @ git+https://github.com/cfn0eft/DiffDesk.git"';
+      badge.hidden = false;
+    }
+  } catch { /* オフライン等では何も表示しない */ }
+})();
+
+// ---------------------------------------------------------------- ヘルプ
+$("#help-btn").onclick = () => {
+  showDialog(`<h2>DiffDesk クイックガイド</h2>
+  <div style="margin:0 12px; max-height:65vh; overflow:auto">
+  <ol style="line-height:1.9; padding-left:1.4em">
+    <li><b>1. ファイル読み込み</b> — CSV/Excelを何個でもドロップ。基準(A)と比較(B)をラジオで選択。文字化けは「読込設定」から直せます</li>
+    <li><b>2. 紐づけ設定</b> — 「自動対応付け」で列を対応付け。キーが無いファイルは<b>キー方式</b>を「行番号」「行の内容」に</li>
+    <li><b>3. 照合結果</b> — 統合/左右分割で差異を確認。<b>「未対応」フィルタ+左右分割</b>で紐づけモード(●をドラッグ)。問題ない差異は「既知にする」で容認</li>
+    <li><b>4. 編集・整形</b> — セル編集・一括クレンジング・検索置換・Data Loaderエラー分析</li>
+    <li><b>5. 多対多検証</b> — 中間(ジャンクション)オブジェクトの投入検証</li>
+  </ol>
+  <h3 style="margin:10px 0 4px">よく使う機能</h3>
+  <ul style="line-height:1.8; padding-left:1.4em">
+    <li><b>案件</b>(画面上部) — 既知差分・履歴・手動紐づけ・辞書を案件ごとに分けて保存</li>
+    <li><b>↩ 元に戻す</b> — 既知差分・手動紐づけ・辞書の直前の登録/削除を取り消し(直近30操作)</li>
+    <li><b>1551 と 1551.0</b> — 数値の表記ゆれは既定で同一視(オプションで変更可)</li>
+    <li><b>Web版AI連携</b> — 「AI用プロンプトをコピー」→Gemini等に貼付→回答を貼り戻すと紐づけ候補に(DiffDesk自体は通信しません)</li>
+  </ul>
+  <p class="hint" style="margin:8px 0">詳細は <a href="https://github.com/cfn0eft/DiffDesk#readme" target="_blank" rel="noopener">README(GitHub)</a> を参照。バージョン: ヘッダー右上に表示</p>
+  </div>
+  <div class="toolbar"><button data-cancel class="primary">閉じる</button></div>`);
+};
+
+loadProjects();

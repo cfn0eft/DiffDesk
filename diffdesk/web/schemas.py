@@ -243,3 +243,7 @@ class MigrationSpecsRequest(BaseModel):
 
 class ProfileSaveRequest(BaseModel):
     profile: dict
+
+
+class ProjectRequest(BaseModel):
+    name: str

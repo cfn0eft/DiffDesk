@@ -1,6 +1,7 @@
 """ワークスペースの永続データ(既知差分・照合履歴・ユーザー辞書・手動紐づけ)。
 
-保存先: ~/.diffdesk/ 配下(プロファイルと同じ場所)。
+保存先: 現在の案件のデータフォルダ(既定案件は ~/.diffdesk/ 直下、
+その他は ~/.diffdesk/projects/<案件名>/)。
 """
 from __future__ import annotations
 
@@ -8,16 +9,60 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from . import profile as _profile
+from . import project as _project
 from .model import DiffDeskError
 
 _HISTORY_LIMIT = 500
+_UNDO_LIMIT = 30
 
 
 def _data_dir(directory: Path | None = None) -> Path:
-    d = directory or _profile.DEFAULT_PROFILE_DIR.parent
+    d = directory or _project.data_dir()
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+# ---------------------------------------------------------------- 統一アンドゥ
+# 変更前のファイル内容を undo.json に積み、「元に戻す」で1操作分を復元する。
+# 対象: 既知差分・手動紐づけ・ユーザー辞書の追加/削除/全削除。
+
+def _record_undo(directory: Path | None, label: str, filename: str) -> None:
+    d = _data_dir(directory)
+    path = d / "undo.json"
+    stack = _load_json(path, [])
+    target = d / filename
+    stack.append({
+        "label": label,
+        "at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "file": filename,
+        "before": target.read_text(encoding="utf-8") if target.exists() else None,
+    })
+    _save_json(path, stack[-_UNDO_LIMIT:])
+
+
+def peek_undo(*, directory: Path | None = None) -> dict:
+    stack = _load_json(_data_dir(directory) / "undo.json", [])
+    last = stack[-1] if stack else None
+    return {"count": len(stack),
+            "label": last["label"] if last else None,
+            "at": last["at"] if last else None}
+
+
+def undo_last(*, directory: Path | None = None) -> str:
+    """直前の操作を取り消し、その操作のラベルを返す。"""
+    d = _data_dir(directory)
+    path = d / "undo.json"
+    stack = _load_json(path, [])
+    if not stack:
+        raise DiffDeskError("元に戻せる操作がありません。")
+    snap = stack.pop()
+    target = d / snap["file"]
+    if snap["before"] is None:
+        target.unlink(missing_ok=True)
+    else:
+        target.write_text(snap["before"], encoding="utf-8")
+    _save_json(path, stack)
+    return snap["label"]
 
 
 def _load_json(path: Path, default):
@@ -68,6 +113,8 @@ def add_known_diff(entry: dict, *, directory: Path | None = None) -> list[dict]:
         return entries  # 重複登録は無視
     normalized["note"] = str(entry.get("note", ""))
     normalized["added_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    kind_ja = {"cell": "セル", "row": "行", "value": "値ルール"}.get(kind, kind)
+    _record_undo(directory, f"既知差分の追加({kind_ja})", "known_diffs.json")
     entries.append(normalized)
     _save_json(_data_dir(directory) / "known_diffs.json", entries)
     return entries
@@ -76,12 +123,14 @@ def add_known_diff(entry: dict, *, directory: Path | None = None) -> list[dict]:
 def remove_known_diff(index: int, *, directory: Path | None = None) -> list[dict]:
     entries = load_known_diffs(directory=directory)
     if 0 <= index < len(entries):
+        _record_undo(directory, "既知差分の削除", "known_diffs.json")
         entries.pop(index)
         _save_json(_data_dir(directory) / "known_diffs.json", entries)
     return entries
 
 
 def clear_known_diffs(*, directory: Path | None = None) -> None:
+    _record_undo(directory, "既知差分の全削除", "known_diffs.json")
     _save_json(_data_dir(directory) / "known_diffs.json", [])
 
 
@@ -125,6 +174,7 @@ def add_manual_link(entry: dict, *, directory: Path | None = None) -> list[dict]
     if any(e["key_a"] == key_a and e["key_b"] == key_b for e in entries):
         return entries  # 重複登録は無視
     score = entry.get("score")
+    _record_undo(directory, "手動紐づけの追加", "manual_links.json")
     entries.append({
         "key_a": key_a, "key_b": key_b,
         "note": str(entry.get("note", ""))[:500],
@@ -138,12 +188,14 @@ def add_manual_link(entry: dict, *, directory: Path | None = None) -> list[dict]
 def remove_manual_link(index: int, *, directory: Path | None = None) -> list[dict]:
     entries = load_manual_links(directory=directory)
     if 0 <= index < len(entries):
+        _record_undo(directory, "手動紐づけの削除", "manual_links.json")
         entries.pop(index)
         _save_json(_data_dir(directory) / "manual_links.json", entries)
     return entries
 
 
 def clear_manual_links(*, directory: Path | None = None) -> None:
+    _record_undo(directory, "手動紐づけの全削除", "manual_links.json")
     _save_json(_data_dir(directory) / "manual_links.json", [])
 
 
@@ -165,6 +217,7 @@ def add_user_pairs(pairs: list[dict], *, directory: Path | None = None) -> list[
             existing.add((a, b))
             added += 1
     if added:
+        _record_undo(directory, f"ユーザー辞書への追加({added}組)", "user_dict.json")
         _save_json(_data_dir(directory) / "user_dict.json", entries)
     return entries
 
@@ -172,6 +225,7 @@ def add_user_pairs(pairs: list[dict], *, directory: Path | None = None) -> list[
 def remove_user_pair(index: int, *, directory: Path | None = None) -> list[dict]:
     entries = load_user_dict(directory=directory)
     if 0 <= index < len(entries):
+        _record_undo(directory, "ユーザー辞書の削除", "user_dict.json")
         entries.pop(index)
         _save_json(_data_dir(directory) / "user_dict.json", entries)
     return entries

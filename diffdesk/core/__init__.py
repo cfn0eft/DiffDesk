@@ -38,9 +38,17 @@ from .workspace import (
     load_known_diffs,
     load_manual_links,
     load_user_dict,
+    peek_undo,
     remove_known_diff,
     remove_manual_link,
     remove_user_pair,
+    undo_last,
+)
+from .project import (
+    create_project,
+    delete_project,
+    list_projects,
+    switch_project,
 )
 from .anonymize import ANONYMIZE_MODES, anonymize_columns
 from .fuzzy import FuzzyCandidate, build_linked_table, fuzzy_match
