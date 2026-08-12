@@ -1,0 +1,58 @@
+# バージョン管理の自動化:
+# - mainにマージされるたび、pyproject.tomlのversionを読み取り、
+#   タグ vX.Y.Z とGitHub Release(リリースノート自動生成)を作成する。
+#   既に存在するバージョンは何もしない(冪等)。
+# - 手動実行(workflow_dispatch)すると、既存の全タグについて
+#   Releaseが無いものをまとめて作成する(過去分の一括作成用)。
+name: リリース自動作成
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 現在のバージョンにタグとReleaseを作成
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="v$(grep -oP '^version = "\K[^"]+' pyproject.toml)"
+          if gh release view "$V" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $V は既に存在します。スキップ。"
+            exit 0
+          fi
+          if git rev-parse -q --verify "refs/tags/$V" >/dev/null; then
+            echo "タグ $V は存在(Releaseのみ作成)"
+            gh release create "$V" --repo "$GITHUB_REPOSITORY" \
+              --title "$V" --generate-notes
+          else
+            gh release create "$V" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --title "$V" --generate-notes
+          fi
+
+      - name: 既存タグの未作成Releaseを一括作成
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --tags --quiet
+          for T in $(git tag -l 'v*' | sort -V); do
+            if gh release view "$T" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "スキップ(既存): $T"
+            else
+              echo "作成: $T"
+              gh release create "$T" --repo "$GITHUB_REPOSITORY" \
+                --title "$T" --generate-notes
+            fi
+          done
