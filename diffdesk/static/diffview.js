@@ -782,8 +782,11 @@ $("#suggest-run").onclick = async () => {
 $("#suggest-accept-high").onclick = async () => {
   const d = state.diff;
   if (!d) return;
-  const targets = suggestItems.filter(it => (it.score ?? 0) >= 0.9);
-  if (!targets.length) return toast("一致率90%以上の候補がありません。", true);
+  const th = +$("#suggest-accept-th").value;
+  const label = th >= 1 ? "100%" : `${Math.round(th * 100)}%以上`;
+  const targets = suggestItems.filter(it => (it.score ?? 0) >= th);
+  if (!targets.length) return toast(`一致率${label}の候補がありません。`, true);
+  if (!window.confirm(`一致率${label}の候補 ${targets.length}件 をまとめて紐づけます。よろしいですか?`)) return;
   let done = 0;
   for (const it of targets) {
     const okRes = await registerManualPair(it.key_a, it.key_b,

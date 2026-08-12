@@ -260,7 +260,14 @@
             <option value="0.6" selected>60%以上</option>
             <option value="0.4">40%以上</option>
           </select></label>
-        <button id="suggest-accept-high" title="一致率90%以上の候補をまとめて登録します(確認画面なし)">90%以上を一括承認</button>
+        <label>一括承認のしきい値
+          <select id="suggest-accept-th">
+            <option value="1">100%のみ</option>
+            <option value="0.95">95%以上</option>
+            <option value="0.9" selected>90%以上</option>
+            <option value="0.8">80%以上</option>
+          </select></label>
+        <button id="suggest-accept-high" title="選んだ一致率以上の候補をまとめて登録します(件数の確認あり)">この一致率以上を一括承認</button>
         <span id="suggest-info" class="hint"></span>
       </div>
       <div id="suggest-list"></div>
