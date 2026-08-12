@@ -567,3 +567,104 @@ class TestV090Features:
         rows = list(ws.values)
         assert rows[0][0] == "基準(A)キー"
         assert rows[1][0] == "0004" and rows[1][3] == "test"
+
+
+class TestV0100Junction:
+    def _setup(self, client):
+        src = ("会社コード,製品名,数量\n"
+               "C001,製品 X,10\nC001,製品 X,20\nC001,製品Y,5\nC002,製品 X,3\n").encode("utf-8")
+        fa = upload(client, "src.csv", src)["file_id"]
+        fb = upload(client, "a.csv", "CompanyCode__c\nC001\nC002\n".encode("utf-8"))["file_id"]
+        fc = upload(client, "b.csv", "ProductKey__c\n製品X\n製品Y\n".encode("utf-8"))["file_id"]
+        fj = upload(client, "j.csv",
+                    "RelKey__c\nREL-C001-製品X\nREL-C001-製品Y\n".encode("utf-8"))["file_id"]
+        config = {
+            "a_source_col": "会社コード", "b_source_col": "製品名",
+            "a_ext_col": "CompanyCode__c", "b_ext_col": "ProductKey__c",
+            "j_key_col": "RelKey__c", "key_template": "REL-{A}-{B}",
+            "b_regex_pattern": r"\s+", "b_regex_replacement": "",
+        }
+        return {"file_source": fa, "file_a": fb, "file_b": fc, "file_j": fj,
+                "config": config}
+
+    def test_verify_and_orphans(self, client):
+        req = self._setup(client)
+        r = client.post("/api/junction-verify", json=req)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["parent_a"]["passed"] and body["parent_b"]["passed"]
+        # 中間: 期待3件(C001-X, C001-Y, C002-X)に対し実績2件 → C002-Xが未取込
+        assert body["junction"]["expected"] == 3
+        assert body["junction"]["missing"] == ["REL-C002-製品X"]
+        assert not body["passed"]
+        # 両親は存在するので parents_ok
+        assert body["orphans"]["causes"]["parents_ok"] == 1
+        # 未取込CSV
+        r2 = client.post("/api/junction-verify/orphans", json={**req, "encoding": "utf-8"})
+        assert r2.status_code == 200
+        text = r2.content.decode("utf-8")
+        assert "REL-C002-製品X" in text and "中間だけ未取込" in text
+
+    def test_config_validation_error(self, client):
+        req = self._setup(client)
+        req["config"]["key_template"] = "REL-{A}"  # {B}が無い
+        r = client.post("/api/junction-verify", json=req)
+        assert r.status_code == 400
+
+
+class TestV0110MigrationSpec:
+    SPEC = {
+        "object": "Parent_A__c",
+        "externalIdField": "ExtA__c",
+        "fields": [
+            {"excelColumn": "SrcID", "salesforceField": "ExtA__c", "type": "string"},
+            {"excelColumn": "区分", "salesforceField": "Kind__c", "type": "picklist",
+             "valueMap": {"甲": "TypeA", "乙": "TypeB"}, "defaultValue": ""},
+            {"salesforceField": "IsActive__c", "constantValue": "true", "type": "boolean"},
+        ],
+    }
+
+    def test_mapping_endpoint(self, client):
+        r = client.post("/api/migration-spec/mapping", json={"spec": self.SPEC})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["transform_count"] == 1
+        assert body["constants"][0]["field"] == "IsActive__c"
+        key = next(p for p in body["pairs"] if p["is_key"])
+        assert key["col_b"] == "ExtA__c"
+
+    def test_diff_with_transform(self, client):
+        fa = upload(client, "src.csv",
+                    "SrcID,区分\nP1,甲\nP2,乙\nP3,不明\n".encode("utf-8"))["file_id"]
+        fb = upload(client, "sf.csv",
+                    "ExtA__c,Kind__c\nP1,TypeA\nP2,TypeB\nP3,\n".encode("utf-8"))["file_id"]
+        pairs = client.post("/api/migration-spec/mapping",
+                            json={"spec": self.SPEC}).json()["pairs"]
+        r = client.post("/api/diff", json={
+            "file_a": fa, "file_b": fb, "mapping": {"pairs": pairs}})
+        assert r.status_code == 200, r.text
+        # 甲→TypeA、乙→TypeB、マップ外→既定""の変換を再現して全行一致
+        assert r.json()["summary"]["same"] == 3
+
+    def test_junction_endpoint(self, client):
+        jx = {
+            "object": "J__c", "externalIdField": "CompKey__c",
+            "skipIfBlank": ["B番号"],
+            "fields": [
+                {"salesforceField": "CompKey__c", "source": "composite",
+                 "prefix": "REL-", "sourceColumns": ["SrcID", "B番号"]},
+                {"excelColumn": "SrcID", "salesforceField": "PA__r.ExtA__c",
+                 "verifyExternalId": {"object": "Parent_A__c", "field": "ExtA__c"}},
+                {"excelColumn": "B番号", "salesforceField": "PB__r.ExtB__c",
+                 "verifyExternalId": {"object": "Parent_B__c", "field": "ExtB__c"}},
+            ],
+        }
+        r = client.post("/api/migration-spec/junction", json={"specs": [jx, self.SPEC]})
+        assert r.status_code == 200, r.text
+        s = r.json()["settings"]
+        assert s["key_template"] == "REL-{A}-{B}"
+        assert s["j_key_col"] == "CompKey__c" and s["required_col"] == "B番号"
+
+    def test_bad_spec_400(self, client):
+        r = client.post("/api/migration-spec/mapping", json={"spec": {"x": 1}})
+        assert r.status_code == 400

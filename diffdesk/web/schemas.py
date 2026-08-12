@@ -209,5 +209,25 @@ class ExportVerifyRequest(BaseModel):
     encoding: str = "utf-8-sig"
 
 
+class JunctionVerifyRequest(BaseModel):
+    file_source: str   # 移行元データのfile_id
+    file_a: str        # 親A抽出のfile_id
+    file_b: str        # 親B抽出のfile_id
+    file_j: str        # 中間抽出のfile_id
+    config: dict       # JunctionConfig.from_dict に渡す設定
+
+
+class JunctionExportRequest(JunctionVerifyRequest):
+    encoding: str = "utf-8-sig"
+
+
+class MigrationSpecRequest(BaseModel):
+    spec: dict  # 移行定義JSON(1ファイル分)
+
+
+class MigrationSpecsRequest(BaseModel):
+    specs: list[dict]  # 移行定義JSON(複数ファイル分)
+
+
 class ProfileSaveRequest(BaseModel):
     profile: dict

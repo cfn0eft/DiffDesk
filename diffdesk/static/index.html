@@ -15,6 +15,7 @@
     <button data-tab="tab-map">2. 紐づけ設定</button>
     <button data-tab="tab-diff">3. 照合結果</button>
     <button data-tab="tab-grid">4. 編集・整形</button>
+    <button data-tab="tab-junction">5. 多対多検証</button>
   </nav>
 </header>
 
@@ -483,6 +484,89 @@
       <span class="hint">ヘッダーの ⇅ でソート(データの並びが変わります)</span>
     </div>
     <div class="scroll-x"><div id="grid-container"></div></div>
+  </div>
+</section>
+
+<section id="tab-junction" class="tab">
+  <div class="card">
+    <h2>多対多(親A ─ 中間 ─ 親B)の移行検証</h2>
+    <p class="hint">「会社 × 製品」のように<b>中間オブジェクト</b>で多対多を表すモデルの移行を4ステップで検証します。
+      移行元(組合せの一覧)と、移行先から抽出した 親A / 親B / 中間 の計4ファイルを
+      「1. ファイル読み込み」で読み込んでから選択してください。</p>
+    <div class="toolbar">
+      <button id="jx-refresh" class="mini">ファイル一覧を更新</button>
+      <button id="jx-spec-btn" title="移行定義JSON(複合キー・スキップ条件・正規化ルールを含む仕様書)を読み込んで下の設定を自動入力します。中間オブジェクトの定義を含めて複数選択できます">移行定義JSONから設定を読み込み</button>
+      <input type="file" id="jx-spec-input" accept=".json,application/json" multiple hidden>
+      <span id="jx-spec-info" class="hint"></span>
+    </div>
+    <table class="formgrid">
+      <tr>
+        <th>移行元データ</th>
+        <td><select id="jx-file-source" class="jx-file"><option value="">(選択)</option></select>
+          <span class="hint">親A・親Bのソース値が行単位で入った一覧(例: 受注明細)</span></td>
+      </tr>
+      <tr>
+        <th>親A 抽出</th>
+        <td><select id="jx-file-a" class="jx-file"><option value="">(選択)</option></select></td>
+      </tr>
+      <tr>
+        <th>親B 抽出</th>
+        <td><select id="jx-file-b" class="jx-file"><option value="">(選択)</option></select></td>
+      </tr>
+      <tr>
+        <th>中間 抽出</th>
+        <td><select id="jx-file-j" class="jx-file"><option value="">(選択)</option></select></td>
+      </tr>
+    </table>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <h2>親A の設定</h2>
+      <table class="formgrid">
+        <tr><th>移行元の列</th><td><select id="jx-a-source"></select>
+          <span class="hint">この列のユニーク件数が期待値(重複排除して登録される前提)</span></td></tr>
+        <tr><th>抽出側の外部ID列</th><td><select id="jx-a-ext"></select></td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>親B の設定</h2>
+      <table class="formgrid">
+        <tr><th>移行元の列</th><td><select id="jx-b-source"></select></td></tr>
+        <tr><th>正規化(任意)</th><td>
+          正規表現 <input id="jx-b-pattern" size="14" placeholder="例: \s+">
+          → 置換 <input id="jx-b-repl" size="10" placeholder="(空=削除)">
+          <span class="hint">移行時に値を変換して登録した場合、その変換ルールを再現します</span></td></tr>
+        <tr><th>抽出側の外部ID列</th><td><select id="jx-b-ext"></select></td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <h2>中間オブジェクトの設定</h2>
+    <table class="formgrid">
+      <tr><th>複合キーの形式</th><td><input id="jx-template" value="{A}-{B}" size="26">
+        <span class="hint">{A}=親Aのソース値、{B}=正規化済みの親Bの値(例: REL-{A}-{B})</span></td></tr>
+      <tr><th>スキップ条件(任意)</th><td><select id="jx-required"><option value="">(なし)</option></select>
+        <span class="hint">この列が空白の行は取り込み対象外として期待値から除外</span></td></tr>
+      <tr><th>抽出側の複合キー列</th><td><select id="jx-j-key"></select></td></tr>
+      <tr><th>親A参照列(任意)</th><td><select id="jx-ref-a"><option value="">(確認しない)</option></select>
+        <span class="hint">中間抽出の親A Lookup列。参照先の実在確認を追加で行います</span></td></tr>
+      <tr><th>親B参照列(任意)</th><td><select id="jx-ref-b"><option value="">(確認しない)</option></select></td></tr>
+    </table>
+    <div class="toolbar">
+      <button id="jx-run" class="primary big">検証を実行 ▶</button>
+      <button id="jx-export" hidden>未取込一覧CSV(原因つき)</button>
+    </div>
+  </div>
+  <div id="jx-result" hidden>
+    <div id="jx-banner"></div>
+    <div class="card">
+      <h2>マクロ検証(件数の突合)</h2>
+      <div id="jx-macro"></div>
+    </div>
+    <div class="card" id="jx-orphan-card" hidden>
+      <h2>未取込の原因切り分け(孤立分析)</h2>
+      <div id="jx-orphans"></div>
+    </div>
   </div>
 </section>
 </main>

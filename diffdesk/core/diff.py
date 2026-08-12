@@ -14,7 +14,8 @@ from .model import (
     RowFilter,
     Table,
 )
-from .normalize import make_normalizer, values_equal
+from .normalize import make_normalizer
+from .transform import pair_values_equal
 
 
 def _match_condition(value: str, cond: FilterCondition) -> bool:
@@ -111,8 +112,9 @@ def diff_tables(table_a: Table, table_b: Table, mapping: MappingConfig,
             row_b = proj_b[uniq_b[key]]
             cell_diffs = []
             for vi in val_idx:
-                if not values_equal(row_a[vi], row_b[vi], normalizer,
-                                    options.numeric_tolerance):
+                if not pair_values_equal(row_a[vi], row_b[vi],
+                                         mapping.pairs[vi], normalizer,
+                                         options.numeric_tolerance):
                     cell_diffs.append(CellDiff(
                         col_a=cols_a[vi], col_b=cols_b[vi],
                         value_a=row_a[vi], value_b=row_b[vi],
