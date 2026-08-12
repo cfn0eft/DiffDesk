@@ -81,6 +81,32 @@ def op_digits_only(v: str) -> str:
     return re.sub(r"\D", "", unicodedata.normalize("NFKC", v))
 
 
+_INT_RE = re.compile(r"^[+-]?\d+$")
+
+
+def op_num_decimal(v: str) -> str:
+    """整数に .0 を付ける(1550 → 1550.0)。
+
+    Salesforce等が数値を小数点付きで出力する形式に合わせたいとき用。
+    整数以外(既に小数点付き・数値でない値・空)はそのまま。全角数字は半角化される。
+    """
+    s = unicodedata.normalize("NFKC", v.strip(" \t\r\n　"))
+    if _INT_RE.match(s):
+        return s + ".0"
+    return v
+
+
+def op_num_plain(v: str) -> str:
+    """小数点以下の末尾ゼロを除く(1550.0 → 1550、250.50 → 250.5)。
+
+    小数点を含む純粋な数値のみ対象。先頭ゼロのID(0001)は変えない。
+    """
+    from .normalize import _canon_decimal
+    s = unicodedata.normalize("NFKC", v.strip(" \t\r\n　"))
+    out = _canon_decimal(s)
+    return out if out != s else v
+
+
 CLEAN_OPS: dict[str, tuple[str, Callable[[str], str]]] = {
     "trim": ("前後の空白を除去", op_trim),
     "alnum_han": ("全角英数記号→半角(それ以外は変えない)", op_alnum_han),
@@ -91,6 +117,8 @@ CLEAN_OPS: dict[str, tuple[str, Callable[[str], str]]] = {
     "lower": ("小文字に統一", op_lower),
     "date_iso": ("日付を yyyy-MM-dd に統一", op_date_iso),
     "digits_only": ("数字のみ抽出(電話・郵便番号)", op_digits_only),
+    "num_decimal": ("整数に .0 を付ける(1550 → 1550.0)", op_num_decimal),
+    "num_plain": ("数値の末尾 .0 を除く(1550.0 → 1550)", op_num_plain),
 }
 
 # 列全体を見て処理する操作(セル単位では表現できないもの)

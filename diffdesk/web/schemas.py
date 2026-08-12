@@ -223,6 +223,8 @@ class InferTemplateRequest(BaseModel):
     a_source_col: str
     b_source_col: str
     j_key_col: str
+    a_regex_pattern: str = ""
+    a_regex_replacement: str = ""
     b_regex_pattern: str = ""
     b_regex_replacement: str = ""
 

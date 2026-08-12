@@ -73,6 +73,8 @@ function jxRequest() {
       b_ext_col: $("#jx-b-ext").value,
       j_key_col: $("#jx-j-key").value,
       key_template: $("#jx-template").value.trim() || "{A}-{B}",
+      a_regex_pattern: $("#jx-a-pattern").value,
+      a_regex_replacement: $("#jx-a-repl").value,
       b_regex_pattern: $("#jx-b-pattern").value,
       b_regex_replacement: $("#jx-b-repl").value,
       required_col: $("#jx-required").value,
@@ -271,6 +273,8 @@ $("#jx-spec-input").onchange = async () => {
     const r = await postJson("/api/migration-spec/junction", { specs });
     const s = r.settings;
     $("#jx-template").value = s.key_template;
+    $("#jx-a-pattern").value = s.a_regex_pattern || "";
+    $("#jx-a-repl").value = s.a_regex_replacement || "";
     $("#jx-b-pattern").value = s.b_regex_pattern;
     $("#jx-b-repl").value = s.b_regex_replacement;
     // セレクトは希望値として保持し、該当列があるファイルを選んだ時点で自動選択
@@ -310,6 +314,8 @@ $("#jx-infer").onclick = async () => {
       a_source_col: $("#jx-a-source").value,
       b_source_col: $("#jx-b-source").value,
       j_key_col: $("#jx-j-key").value,
+      a_regex_pattern: $("#jx-a-pattern").value,
+      a_regex_replacement: $("#jx-a-repl").value,
       b_regex_pattern: $("#jx-b-pattern").value,
       b_regex_replacement: $("#jx-b-repl").value,
     });

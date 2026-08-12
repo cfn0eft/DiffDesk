@@ -14,11 +14,15 @@ def apply_known_diffs(diff: DiffResult, entries: list[dict]) -> DiffResult:
     - cell型: 一致するセル差分を known_diffs へ移動。全セル差分が既知になった行は
       status="same"・known=True(照合合格扱い)になる。
     - row型: only_a / only_b の該当行に known=True を付ける(欠落の容認)。
+    - value型: キー不問の値ルール。この列でこの値の組(A→B)の差異は
+      すべての行で既知扱い(同じ差異の一括登録用)。
     """
     if not entries:
         return diff
     cell_set = {(tuple(e["key"]), e["col_a"], e["value_a"], e["value_b"])
                 for e in entries if e.get("type") == "cell"}
+    value_set = {(e["col_a"], e["value_a"], e["value_b"])
+                 for e in entries if e.get("type") == "value"}
     row_set = {(tuple(e["key"]), e["status"])
                for e in entries if e.get("type") == "row"}
 
@@ -28,9 +32,10 @@ def apply_known_diffs(diff: DiffResult, entries: list[dict]) -> DiffResult:
             rows.append(RowDiff(key=rd.key, status=rd.status, row_a=rd.row_a,
                                 row_b=rd.row_b, known=True))
             continue
-        if rd.status == "changed" and cell_set:
+        if rd.status == "changed" and (cell_set or value_set):
             known = [cd for cd in rd.cell_diffs
-                     if (rd.key, cd.col_a, cd.value_a, cd.value_b) in cell_set]
+                     if (rd.key, cd.col_a, cd.value_a, cd.value_b) in cell_set
+                     or (cd.col_a, cd.value_a, cd.value_b) in value_set]
             if known:
                 remaining = [cd for cd in rd.cell_diffs if cd not in known]
                 status = "changed" if remaining else "same"

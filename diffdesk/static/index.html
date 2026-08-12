@@ -534,6 +534,10 @@
         <tr><th>親A 抽出(任意)</th><td><select id="jx-file-a" class="jx-file"><option value="">(使わない)</option></select>
           <span class="hint">選ぶと親Aの件数検証と、未取込の原因切り分けが有効になります</span></td></tr>
         <tr><th>親Aの外部ID列</th><td><select id="jx-a-ext"><option value="">(親A抽出を選択)</option></select></td></tr>
+        <tr><th>親Aの正規化(任意)</th><td>
+          正規表現 <input id="jx-a-pattern" size="14" placeholder="例: ^(\d+)$">
+          → 置換 <input id="jx-a-repl" size="10" placeholder="例: \1.0">
+          <span class="hint">移行時に値を変換して登録した場合に再現(例: 1550 を 1550.0 で登録 → ^(\d+)$ → \1.0)</span></td></tr>
         <tr><th>親B 抽出(任意)</th><td><select id="jx-file-b" class="jx-file"><option value="">(使わない)</option></select></td></tr>
         <tr><th>親Bの外部ID列</th><td><select id="jx-b-ext"><option value="">(親B抽出を選択)</option></select></td></tr>
         <tr><th>親Bの正規化(任意)</th><td>

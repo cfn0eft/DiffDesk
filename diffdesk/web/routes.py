@@ -661,6 +661,8 @@ def junction_infer_template(req: sc.InferTemplateRequest):
         store.get_table(req.file_source), store.get_table(req.file_j),
         a_source_col=req.a_source_col, b_source_col=req.b_source_col,
         j_key_col=req.j_key_col,
+        a_regex_pattern=req.a_regex_pattern,
+        a_regex_replacement=req.a_regex_replacement,
         b_regex_pattern=req.b_regex_pattern,
         b_regex_replacement=req.b_regex_replacement)
 
