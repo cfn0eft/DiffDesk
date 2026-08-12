@@ -359,7 +359,10 @@ function renderRowsTable(rows) {
         cells.push(`<td>${escapeHtml(v)}</td>`);
       }
     }
-    return `<tr class="row-${r.status}" data-ri="${ri}"><td>${STATUS_JA[r.status]}</td>` +
+    const note = notesMap.get(r.key.join("/"));
+    const noteMark = note
+      ? ` <span title="メモ: ${escapeHtml(note)}">📝</span>` : "";
+    return `<tr class="row-${r.status}" data-ri="${ri}"><td>${STATUS_JA[r.status]}${noteMark}</td>` +
       `<td class="matchcell">${matchLabel(r)}</td>${cells.join("")}</tr>`;
   }).join("");
 
@@ -1020,10 +1023,26 @@ function showRecordDetail(r) {
     <div style="margin:0 12px; max-height:60vh; overflow:auto">
     <table><thead><tr><th></th><th>項目</th><th>基準 (A)</th><th>比較 (B)</th><th></th></tr></thead>
     <tbody>${rowsHtml}</tbody></table></div>
+    <div class="toolbar" style="margin:4px 12px">
+      <label style="flex:1; display:flex; gap:6px">📝 メモ:
+        <input id="note-input" style="flex:1" maxlength="1000"
+          placeholder="レビューメモ(例: 部門へ照会中)" value="${escapeHtml(notesMap.get(r.key.join("/")) || "")}">
+      </label>
+      <button id="note-save" class="mini">メモを保存</button>
+    </div>
     <p id="manual-meta" class="hint" style="margin:4px 12px"></p>
     <div class="toolbar">${missingKnownBtn}${linkUi}${unlinkBtn}<button data-cancel class="primary">閉じる</button></div>`;
   dlg.onkeydown = null;  // 紐づけ確認ダイアログのEnterハンドラを引き継がない
   dlg.querySelector("[data-cancel]").onclick = () => dlg.close();
+  dlg.querySelector("#note-save").onclick = async () => {
+    try {
+      await postJson("/api/notes", { key: [...r.key],
+                                     text: dlg.querySelector("#note-input").value });
+      await loadNotes();
+      toast("メモを保存しました");
+      loadRows();
+    } catch (e) { toast(e.message, true); }
+  };
   const linkDo = dlg.querySelector("#link-do");
   if (linkDo) {
     const side = r.status === "only_a" ? "b" : "a";  // 相手側の候補を出す
@@ -1411,3 +1430,38 @@ $("#ai2-register").onclick = async () => {
     refreshAfterKnownChange();
   } catch (e) { toast(e.message, true); }
 };
+
+// ---------------------------------------------------------------- 注釈(レビューメモ)
+const notesMap = new Map();  // "key1/key2" → text
+
+async function loadNotes() {
+  try {
+    const { entries } = await (await api("/api/notes")).json();
+    notesMap.clear();
+    entries.forEach(e => notesMap.set(e.key.join("/"), e.text));
+    renderNotesList(entries);
+  } catch { /* 表示のみなので無視 */ }
+}
+
+function renderNotesList(entries) {
+  const box = $("#notes-list");
+  if (!box) return;
+  box.innerHTML = entries.length
+    ? `<table><thead><tr><th>キー</th><th>メモ</th><th>更新日時</th><th></th></tr></thead><tbody>` +
+      entries.map(e =>
+        `<tr><td>${escapeHtml(e.key.join("/"))}</td><td>${escapeHtml(e.text)}</td>` +
+        `<td class="hint">${escapeHtml(e.updated_at || "")}</td>` +
+        `<td><button class="mini danger note-del" data-key='${escapeHtml(JSON.stringify(e.key))}'>削除</button></td></tr>`
+      ).join("") + `</tbody></table>`
+    : `<p class="hint">まだ注釈はありません。照合結果の行をクリック → 詳細画面の「メモ」で登録できます。</p>`;
+  box.querySelectorAll(".note-del").forEach(b => b.onclick = async () => {
+    await postJson("/api/notes", { key: JSON.parse(b.dataset.key), text: "" });
+    await loadNotes();
+    toast("注釈を削除しました");
+    if (state.diff) loadRows();
+  });
+}
+
+$("#notes-refresh").onclick = loadNotes;
+document.addEventListener("diffdesk:workspace-changed", loadNotes);
+loadNotes();

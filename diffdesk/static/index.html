@@ -338,6 +338,14 @@
       </div>
       <div id="known-list"></div>
     </details>
+    <details class="card sub" open>
+      <summary>注釈(レビューメモ)の一覧</summary>
+      <p class="hint">照合結果の行をクリック → 詳細画面の「メモ」で登録できます。キー基準で保存されるため、再照合しても残ります。検証パックにも同梱されます。</p>
+      <div class="toolbar">
+        <button id="notes-refresh" class="mini">一覧を更新</button>
+      </div>
+      <div id="notes-list"></div>
+    </details>
     </div><!-- /sub-manage -->
     <div class="subtab-panel" id="sub-records">
     <details class="card sub" open>
@@ -648,6 +656,23 @@
     <div id="health-warnings"></div>
     <div id="health-result"></div>
   </details>
+
+  <div class="card">
+    <h2>3ファイル比較(多段トレース) <span class="hint">(原本→加工→最終のどの段階で値が変わったかを特定。キー以外の列は名前で自動対応)</span></h2>
+    <div class="toolbar wrap">
+      <label>原本(A): <select id="tr-file-a"><option value="">(選択)</option></select></label>
+      <label>キー: <select id="tr-key-a"></select></label>
+      <span>→</span>
+      <label>中間(M): <select id="tr-file-m"><option value="">(選択)</option></select></label>
+      <label>キー: <select id="tr-key-m"></select></label>
+      <span>→</span>
+      <label>最終(B): <select id="tr-file-b"><option value="">(選択)</option></select></label>
+      <label>キー: <select id="tr-key-b"></select></label>
+      <button id="btn-trace" class="primary">比較</button>
+      <button id="btn-trace-export" hidden>CSVで出力</button>
+    </div>
+    <div id="trace-result"></div>
+  </div>
 
   <div class="card">
     <h2>参照整合性チェック <span class="hint">(この列の値は、マスタ側の列に存在するか — Data Loaderの参照エラーを投入前に予防)</span></h2>

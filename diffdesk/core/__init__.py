@@ -38,8 +38,10 @@ from .workspace import (
     load_history,
     load_known_diffs,
     load_manual_links,
+    load_notes,
     load_user_dict,
     peek_undo,
+    set_note,
     remove_known_diff,
     remove_manual_link,
     remove_user_pair,
@@ -56,6 +58,7 @@ from .ai_assist import build_known_prompt, parse_known_answer
 from .pii import detect_pii_in_diff
 from .preflight import preflight
 from .refcheck import missing_rows_table, ref_check
+from .trace import trace_diff, trace_table
 from .runsnap import compare_with_prev, prev_key_sets, save_run_snapshot
 from .project import (
     create_project,

@@ -21,7 +21,7 @@ from .model import DiffResult, Table
 from .report_html import build_html_report
 from .upsert import build_report_table
 from .verify import build_verification, build_verification_xlsx
-from .workspace import load_known_diffs, load_manual_links
+from .workspace import load_known_diffs, load_manual_links, load_notes
 
 
 def _known_table(directory: Path | None) -> Table:
@@ -38,6 +38,12 @@ def _known_table(directory: Path | None) -> Table:
     return Table(
         columns=["種類", "キー", "列", "基準の値", "比較の値", "欠落側", "メモ", "登録日時"],
         rows=rows, name="既知差分")
+
+
+def _notes_table(directory: Path | None) -> Table:
+    rows = [["/".join(e.get("key") or []), e.get("text", ""),
+             e.get("updated_at", "")] for e in load_notes(directory=directory)]
+    return Table(columns=["キー", "メモ", "更新日時"], rows=rows, name="注釈")
 
 
 def _links_table(directory: Path | None) -> Table:
@@ -78,6 +84,7 @@ def _readme_text(result: DiffResult, project_name: str, version: str) -> str:
         "共有用レポート.html     … ブラウザで開ける単一ファイルレポート",
         "既知差分.csv            … 「確認済み・問題なし」として容認した差異",
         "手動紐づけ.csv          … 手動でペアにしたレコードの監査記録",
+        "注釈.csv                … 行に付けたレビューメモ",
         "監査ログ.csv            … この案件で行った操作の証跡",
     ]
     return "\r\n".join(lines) + "\r\n"
@@ -99,5 +106,6 @@ def build_verification_pack(result: DiffResult, *, project_name: str = "既定",
                    .encode("utf-8"))
         z.writestr("既知差分.csv", write_csv(_known_table(directory)))
         z.writestr("手動紐づけ.csv", write_csv(_links_table(directory)))
+        z.writestr("注釈.csv", write_csv(_notes_table(directory)))
         z.writestr("監査ログ.csv", write_csv(audit_table(directory=directory)))
     return buf.getvalue()

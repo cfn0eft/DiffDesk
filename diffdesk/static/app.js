@@ -253,7 +253,8 @@ export async function refreshFileList() {
   }
   // エラーファイル分析・許可値取得用のファイルセレクトも更新
   for (const selId of ["#err-file-select", "#val-allow-src-file", "#health-file-select",
-                       "#ref-child-file", "#ref-master-file"]) {
+                       "#ref-child-file", "#ref-master-file",
+                       "#tr-file-a", "#tr-file-m", "#tr-file-b"]) {
     const sel = $(selId);
     if (!sel) continue;
     const cur = sel.value;
@@ -1172,5 +1173,57 @@ $("#btn-refcheck-export").onclick = async () => {
       body: JSON.stringify(refcheckBody()),
     });
     downloadResponse(res, "参照エラー行.csv");
+  } catch (e) { toast(e.message, true); }
+};
+
+// ---------------------------------------------------------------- 3ファイル比較(多段トレース)
+for (const [f, k] of [["#tr-file-a", "#tr-key-a"], ["#tr-file-m", "#tr-key-m"],
+                      ["#tr-file-b", "#tr-key-b"]]) {
+  $(f).onchange = () => fillRefCols(f, k);
+}
+
+function traceBody() {
+  return {
+    file_a: $("#tr-file-a").value, key_a: $("#tr-key-a").value,
+    file_m: $("#tr-file-m").value, key_m: $("#tr-key-m").value,
+    file_b: $("#tr-file-b").value, key_b: $("#tr-key-b").value,
+  };
+}
+
+$("#btn-trace").onclick = async () => {
+  const b = traceBody();
+  if (!b.file_a || !b.file_m || !b.file_b) return toast("3つのファイルを選択してください", true);
+  try {
+    const r = await postJson("/api/trace", b);
+    const s = r.by_stage;
+    const warn = [];
+    if (r.missing_m) warn.push(`中間(M)に無いキー ${r.missing_m}件`);
+    if (r.missing_b) warn.push(`最終(B)に無いキー ${r.missing_b}件`);
+    $("#trace-result").innerHTML =
+      `<p style="margin:6px 0"><b>${r.changed ? `✖ 値の変化 ${r.changed}件` : "✔ 全段階で一致"}</b> — ` +
+      `照合対象 ${r.matched}件(比較列: ${r.columns.map(escapeHtml).join("、")})<br>` +
+      `<span class="hint">A→M(加工時): <b>${s.a_m}</b> / M→B(投入時): <b>${s.m_b}</b> / 両段階: ${s.both} / Mだけ異なる: ${s.revert}` +
+      (warn.length ? ` / ⚠ ${warn.join("・")}` : "") + `</span></p>` +
+      (r.rows.length ? `<div class="scroll-x"><table><thead><tr><th>キー</th><th>列</th>` +
+        `<th>原本(A)</th><th>中間(M)</th><th>最終(B)</th><th>変化した段階</th></tr></thead><tbody>` +
+        r.rows.map(x =>
+          `<tr><td>${escapeHtml(x.key)}</td><td>${escapeHtml(x.col)}</td>` +
+          `<td>${escapeHtml(x.value_a)}</td><td class="${x.stage === "a_m" || x.stage === "both" || x.stage === "revert" ? "cell-changed" : ""}">${escapeHtml(x.value_m)}</td>` +
+          `<td class="${x.stage !== "a_m" ? "cell-changed" : ""}">${escapeHtml(x.value_b)}</td>` +
+          `<td><b>${escapeHtml(x.stage_ja)}</b></td></tr>`).join("") +
+        `</tbody></table></div>` +
+        (r.rows_truncated ? `<p class="hint">ほか${r.rows_truncated}件はCSV出力で確認できます</p>` : "")
+        : "");
+    $("#btn-trace-export").hidden = !r.changed;
+  } catch (e) { toast(e.message, true); }
+};
+
+$("#btn-trace-export").onclick = async () => {
+  try {
+    const res = await api("/api/export/trace", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(traceBody()),
+    });
+    downloadResponse(res, "多段トレース.csv");
   } catch (e) { toast(e.message, true); }
 };

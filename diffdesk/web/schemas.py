@@ -288,3 +288,17 @@ class AiAnswerRequest(BaseModel):
 
 class KnownBulkRequest(BaseModel):
     entries: list[dict]
+
+
+class TraceRequest(BaseModel):
+    file_a: str
+    key_a: str
+    file_m: str
+    key_m: str
+    file_b: str
+    key_b: str
+
+
+class NoteRequest(BaseModel):
+    key: list
+    text: str = ""

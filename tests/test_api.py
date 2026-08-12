@@ -932,6 +932,7 @@ class TestV0180AuditPack:
         z = zipfile.ZipFile(io.BytesIO(r.content))
         assert "はじめにお読みください.txt" in z.namelist()
         assert "検証レポート.xlsx" in z.namelist()
+        assert "注釈.csv" in z.namelist()
 
 
 class TestV0191HelpPage:
@@ -1093,3 +1094,29 @@ class TestV0220RefPiiAi:
         # アンドゥ1回で戻る
         client.post("/api/undo")
         assert client.get("/api/known-diffs").json()["entries"] == []
+
+
+class TestV0230TraceNotes:
+    def test_trace_and_export(self, client):
+        fa = upload(client, "gen.csv", "ID,数\n1,100\n2,200\n".encode("utf-8"))["file_id"]
+        fm = upload(client, "mid.csv", "ID,数\n1,150\n2,200\n".encode("utf-8"))["file_id"]
+        fb = upload(client, "fin.csv", "ID,数\n1,150\n2,999\n".encode("utf-8"))["file_id"]
+        body = {"file_a": fa, "key_a": "ID", "file_m": fm, "key_m": "ID",
+                "file_b": fb, "key_b": "ID"}
+        r = client.post("/api/trace", json=body).json()
+        assert r["by_stage"]["a_m"] == 1 and r["by_stage"]["m_b"] == 1
+        assert r["changed"] == 2
+        r = client.post("/api/export/trace", json=body)
+        assert r.status_code == 200
+        text = r.content.decode("utf-8-sig")
+        assert "変化した段階" in text and "999" in text
+
+    def test_notes_crud(self, client):
+        r = client.post("/api/notes", json={"key": ["0001"], "text": "照会中"})
+        assert r.status_code == 200
+        entries = client.get("/api/notes").json()["entries"]
+        assert entries == [{"key": ["0001"], "text": "照会中",
+                            "added_at": entries[0]["added_at"],
+                            "updated_at": entries[0]["updated_at"]}]
+        client.post("/api/notes", json={"key": ["0001"], "text": ""})
+        assert client.get("/api/notes").json()["entries"] == []

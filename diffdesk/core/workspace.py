@@ -267,3 +267,44 @@ def remove_user_pair(index: int, *, directory: Path | None = None) -> list[dict]
         entries.pop(index)
         _save_json(_data_dir(directory) / "user_dict.json", entries)
     return entries
+
+
+# ---------------------------------------------------------------- 注釈(レビューメモ)
+# 形式: [{"key": [...], "text": str, "added_at", "updated_at"}]
+# 行キー基準なので、同じファイルで差分を再実行してもメモは残る。
+
+def load_notes(*, directory: Path | None = None) -> list[dict]:
+    return _load_json(_data_dir(directory) / "notes.json", [])
+
+
+def set_note(key: list, text: str, *, directory: Path | None = None) -> list[dict]:
+    """行キーへのメモを設定する(textが空なら削除)。"""
+    if not isinstance(key, list) or not key:
+        raise DiffDeskError("注釈のkeyは文字列のリストで指定してください。")
+    key = [str(k) for k in key]
+    text = str(text).strip()[:1000]
+    entries = load_notes(directory=directory)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    existing = next((e for e in entries if e["key"] == key), None)
+    if text == "":
+        if existing is None:
+            return entries
+        _record_undo(directory, "注釈の削除", "notes.json")
+        entries.remove(existing)
+    elif existing is None:
+        _record_undo(directory, "注釈の追加", "notes.json")
+        entries.append({"key": key, "text": text,
+                        "added_at": now, "updated_at": now})
+    else:
+        if existing["text"] == text:
+            return entries
+        _record_undo(directory, "注釈の変更", "notes.json")
+        existing["text"] = text
+        existing["updated_at"] = now
+    _save_json(_data_dir(directory) / "notes.json", entries)
+    return entries
+
+
+def clear_notes(*, directory: Path | None = None) -> None:
+    _record_undo(directory, "注釈の全削除", "notes.json")
+    _save_json(_data_dir(directory) / "notes.json", [])
