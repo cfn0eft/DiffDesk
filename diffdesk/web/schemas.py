@@ -260,3 +260,7 @@ class WorksessionSaveRequest(BaseModel):
 
 class WorksessionNameRequest(BaseModel):
     name: str
+
+
+class ExportPackRequest(BaseModel):
+    only_b_is_error: bool = True

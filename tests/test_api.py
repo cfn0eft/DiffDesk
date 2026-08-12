@@ -905,3 +905,30 @@ class TestV0170Worksession:
         assert client.get("/api/worksessions").json()["sessions"] == []
         client.post("/api/projects/switch", json={"name": "既定"})
         assert len(client.get("/api/worksessions").json()["sessions"]) == 1
+
+
+class TestV0180AuditPack:
+    def test_audit_recorded_and_listed(self, client):
+        TestDiffFlow().run_diff(client)
+        client.post("/api/known-diffs", json={"entry": {
+            "type": "value", "col_a": "メール", "value_a": "a", "value_b": "b"}})
+        records = client.get("/api/audit").json()["records"]
+        actions = [r["action"] for r in records]
+        assert "照合実行" in actions and "既知差分登録" in actions
+        r = client.post("/api/export/audit", json={})
+        assert r.status_code == 200
+        assert "監査ログ" in __import__("urllib.parse", fromlist=["unquote"]).unquote(
+            r.headers["content-disposition"])
+
+    def test_pack_export(self, client):
+        import io
+        import zipfile
+        diff_id, _ = TestDiffFlow().run_diff(client)
+        r = client.post(f"/api/export/pack/{diff_id}", json={})
+        assert r.status_code == 200, r.text
+        import urllib.parse as up
+        cd = up.unquote(r.headers["content-disposition"])
+        assert "検証パック_master_vs_sf_" in cd and cd.endswith('.zip')
+        z = zipfile.ZipFile(io.BytesIO(r.content))
+        assert "はじめにお読みください.txt" in z.namelist()
+        assert "検証レポート.xlsx" in z.namelist()

@@ -35,6 +35,9 @@ from ..core import (
     remove_manual_link,
     suggest_links,
     validate_manual_pair,
+    audit,
+    audit_table,
+    build_verification_pack,
     clear_history,
     clear_known_diffs,
     create_project,
@@ -468,11 +471,13 @@ def add_manual_pair(diff_id: str, req: sc.ManualPairRequest):
         raise DiffDeskError(
             f"比較(B)側のキー {'/'.join(pair['key_b'])} は未対応(Bのみ)の行ではありません。")
     pairs = add_manual_link({**pair, "note": req.note, "score": req.score})
+    audit("手動紐づけ登録", f"{'/'.join(pair['key_a'])} ⇔ {'/'.join(pair['key_b'])}")
     return {"pairs": pairs, "count": len(pairs)}
 
 
 @router.delete("/diff/{diff_id}/manual-pairs/{index}")
 def delete_manual_pair(diff_id: str, index: int):
+    audit("手動紐づけ削除", f"index={index}")
     pairs = remove_manual_link(index)
     return {"pairs": pairs, "count": len(pairs)}
 
@@ -557,6 +562,9 @@ def run_diff(req: sc.DiffRequest):
         "match_rate": round(v.to_dict()["match_rate"], 4),
         "passed": v.passed,
     })
+    audit("照合実行",
+          f"{result.name_a} vs {result.name_b}: 一致{v.same} 相違{v.changed} "
+          f"Aのみ{v.only_a} Bのみ{v.only_b} 判定{'OK' if v.passed else 'NG'}")
     return {
         "diff_id": diff_id,
         "summary": result.summary,
@@ -619,6 +627,7 @@ def export_upsert(diff_id: str, req: sc.ExportUpsertRequest):
     table = build_upsert_table(result, external_id_col_a=req.external_id,
                                include=include)
     raw = write_csv(table, encoding=req.encoding, errors=req.errors)
+    audit("アップサートCSV出力", f"{result.name_a} vs {result.name_b}: {len(table.rows)}行")
     return _download(raw, _report_name("アップサート", result.name_a, result.name_b, ext="csv"), "text/csv")
 
 
@@ -627,6 +636,7 @@ def export_delete(diff_id: str, req: sc.ExportDeleteRequest):
     result = _diff_with_known(diff_id)
     table = build_delete_table(result, id_col_b=req.id_col_b)
     raw = write_csv(table, encoding=req.encoding)
+    audit("削除用CSV出力", f"{result.name_a} vs {result.name_b}: {len(table.rows)}行")
     return _download(raw, _report_name("削除用", result.name_a, result.name_b, ext="csv"), "text/csv")
 
 
@@ -639,6 +649,7 @@ def export_sdl(diff_id: str):
 @router.post("/export/report/{diff_id}")
 def export_report(diff_id: str, req: sc.ExportReportRequest):
     result = _diff_with_known(diff_id)
+    audit("照合レポート出力", f"{result.name_a} vs {result.name_b} ({req.format})")
     if req.format == "xlsx":
         return _download(build_xlsx_report(result), _report_name("照合レポート", result.name_a, result.name_b, ext="xlsx"),
                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -716,6 +727,7 @@ def junction_orphans_csv(req: sc.JunctionExportRequest):
 @router.post("/export/verify/{diff_id}")
 def export_verify(diff_id: str, req: sc.ExportVerifyRequest):
     result = _diff_with_known(diff_id)
+    audit("検証レポート出力", f"{result.name_a} vs {result.name_b} ({req.format})")
     if req.format == "xlsx":
         return _download(
             build_verification_xlsx(result, only_b_is_error=req.only_b_is_error),
@@ -749,6 +761,7 @@ def export_undo_delete(file_id: str, req: sc.ExportDeleteRequest):
 @router.post("/export/html/{diff_id}")
 def export_html(diff_id: str, req: sc.ExportHtmlRequest):
     result = _diff_with_known(diff_id)
+    audit("共有用HTMLレポート出力", f"{result.name_a} vs {result.name_b}")
     html_text = build_html_report(result, only_b_is_error=req.only_b_is_error)
     return _download(html_text.encode("utf-8"), _report_name("照合レポート", result.name_a, result.name_b, ext="html"), "text/html")
 
@@ -900,12 +913,16 @@ def get_projects():
 
 @router.post("/projects")
 def post_project(req: sc.ProjectRequest):
-    return create_project(req.name)
+    cfg = create_project(req.name)
+    audit("案件作成", req.name)
+    return cfg
 
 
 @router.post("/projects/switch")
 def post_project_switch(req: sc.ProjectRequest):
-    return switch_project(req.name)
+    cfg = switch_project(req.name)
+    audit("案件切替", req.name)
+    return cfg
 
 
 @router.delete("/projects/{name}")
@@ -920,7 +937,9 @@ def get_undo():
 
 @router.post("/undo")
 def post_undo():
-    return {"label": undo_last()}
+    label = undo_last()
+    audit("元に戻す", label)
+    return {"label": label}
 
 
 _update_cache: dict = {"at": 0.0, "latest": None}
@@ -977,7 +996,9 @@ def worksession_save(req: sc.WorksessionSaveRequest):
         })
     payload = {"files": files, "mapping": req.mapping,
                "options": req.options, "row_filter": req.row_filter}
-    return ws.save_worksession(req.name, payload)
+    meta = ws.save_worksession(req.name, payload)
+    audit("セッション保存", f"{req.name}({len(files)}ファイル)")
+    return meta
 
 
 @router.get("/worksessions")
@@ -1007,6 +1028,7 @@ def worksession_restore(req: sc.WorksessionNameRequest):
             role_a = entry.file_id
         elif f.get("role") == "b":
             role_b = entry.file_id
+    audit("セッション復元", f"{req.name}({len(infos)}ファイル)")
     return {"files": infos, "role_a": role_a, "role_b": role_b,
             "mapping": data.get("mapping") or {},
             "options": data.get("options") or {},
@@ -1017,7 +1039,33 @@ def worksession_restore(req: sc.WorksessionNameRequest):
 @router.delete("/worksession/{name}")
 def worksession_delete(name: str):
     ws.delete_worksession(name)
+    audit("セッション削除", name)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- 監査ログ・検証パック
+@router.get("/audit")
+def get_audit(limit: int = 200):
+    from ..core import load_audit
+    return {"records": load_audit(limit=max(1, min(limit, 2000)))}
+
+
+@router.post("/export/audit")
+def export_audit():
+    table = audit_table()
+    return _download(write_csv(table), _report_name("監査ログ", ext="csv"), "text/csv")
+
+
+@router.post("/export/pack/{diff_id}")
+def export_pack(diff_id: str, req: sc.ExportPackRequest):
+    from .. import __version__
+    result = _diff_with_known(diff_id)
+    audit("検証パック出力", f"{result.name_a} vs {result.name_b}")
+    raw = build_verification_pack(
+        result, project_name=list_projects()["current"], version=__version__,
+        only_b_is_error=req.only_b_is_error)
+    return _download(raw, _report_name("検証パック", result.name_a, result.name_b, ext="zip"),
+                     "application/zip")
 
 
 # ---------------------------------------------------------------- 既知差分・履歴・辞書
@@ -1029,16 +1077,22 @@ def get_known_diffs():
 @router.post("/known-diffs")
 def post_known_diff(req: sc.KnownDiffRequest):
     entries = add_known_diff(req.entry)
+    e = req.entry
+    audit("既知差分登録",
+          f"type={e.get('type')} col={e.get('col_a', '')} "
+          f"{e.get('value_a', '')}→{e.get('value_b', '')} key={'/'.join(e.get('key') or [])}")
     return {"ok": True, "count": len(entries)}
 
 
 @router.delete("/known-diffs/{index}")
 def delete_known_diff(index: int):
+    audit("既知差分削除", f"index={index}")
     return {"entries": remove_known_diff(index)}
 
 
 @router.delete("/known-diffs")
 def delete_all_known_diffs():
+    audit("既知差分全削除")
     clear_known_diffs()
     return {"ok": True}
 
