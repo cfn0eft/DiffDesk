@@ -946,3 +946,63 @@ class TestV0191HelpPage:
         for anchor in ("はじめに", "既知差分", "手動紐づけ", "検証パック",
                        "ショートカット", "よくある質問", "多対多検証"):
             assert anchor in text, anchor
+
+
+class TestV0200ClassifySearch:
+    def upload_diff(self, client):
+        fa = upload(client, "a.csv",
+                    "id,名前,数\n1,山田 太郎,100\n2,佐藤花子,200.0\n3,鈴木一郎,300\n"
+                    .encode("utf-8"))["file_id"]
+        fb = upload(client, "b.csv",
+                    "id,名前,数\n1,山田太郎,100\n2,佐藤花子,200\n3,田中次郎,300\n"
+                    .encode("utf-8"))["file_id"]
+        r = client.post("/api/diff", json={
+            "file_a": fa, "file_b": fb,
+            "mapping": {"pairs": [
+                {"col_a": "id", "col_b": "id", "is_key": True},
+                {"col_a": "名前", "col_b": "名前"},
+                {"col_a": "数", "col_b": "数"}]},
+            "options": {"trim": False, "normalize_width": False,
+                        "normalize_numeric": False},
+        })
+        assert r.status_code == 200, r.text
+        return r.json()["diff_id"]
+
+    def test_classify_endpoint(self, client):
+        diff_id = self.upload_diff(client)
+        r = client.get(f"/api/diff/{diff_id}/classify").json()
+        by = {c["cause"]: c["count"] for c in r["causes"]}
+        assert by == {"space": 1, "numeric": 1, "real": 1}
+
+    def test_known_by_cause_and_undo(self, client):
+        diff_id = self.upload_diff(client)
+        r = client.post(f"/api/diff/{diff_id}/known-by-cause",
+                        json={"cause": "numeric"})
+        assert r.json()["registered"] == 1
+        # 分類から消える
+        r = client.get(f"/api/diff/{diff_id}/classify").json()
+        assert "numeric" not in {c["cause"] for c in r["causes"]}
+        # realは拒否
+        assert client.post(f"/api/diff/{diff_id}/known-by-cause",
+                           json={"cause": "real"}).status_code == 400
+        # アンドゥ1回で全て戻る
+        client.post("/api/undo")
+        r = client.get(f"/api/diff/{diff_id}/classify").json()
+        assert "numeric" in {c["cause"] for c in r["causes"]}
+
+    def test_rows_search_and_filters(self, client):
+        diff_id = self.upload_diff(client)
+        # 検索(値)
+        r = client.get(f"/api/diff/{diff_id}/rows", params={"q": "花子"}).json()
+        assert r["total"] == 1 and r["rows"][0]["key"] == ["2"]
+        # 検索(キー)
+        r = client.get(f"/api/diff/{diff_id}/rows", params={"q": "3"}).json()
+        assert r["total"] == 1
+        # 原因フィルタ
+        r = client.get(f"/api/diff/{diff_id}/rows",
+                       params={"cause": "space"}).json()
+        assert r["total"] == 1 and r["rows"][0]["key"] == ["1"]
+        # 列フィルタ
+        r = client.get(f"/api/diff/{diff_id}/rows",
+                       params={"col": "数", "status": "changed"}).json()
+        assert r["total"] == 1 and r["rows"][0]["key"] == ["2"]

@@ -490,3 +490,11 @@ nav#tabs button.active .step-badge { color: #2e6b28; }
   border-color: #2c362f; font-weight: bold; padding: 5px 22px; font-size: 13px;
 }
 main { padding-bottom: 46px; } /* 実行バーに隠れないように */
+
+/* 差異の自動分類チップ */
+#classify-summary { margin: 4px 0 8px; }
+.clschip { display: inline-flex; align-items: center; gap: 2px; margin: 2px 4px 2px 0; }
+.clschip .cls-filter.active { background: var(--accent); color: #fff; border-color: #2c362f; }
+.clschip.cls-real .cls-filter { border-color: var(--danger); color: var(--danger); font-weight: bold; }
+.clschip.cls-real .cls-filter.active { background: var(--danger); color: #fff; }
+#columns-summary .colsum.active { background: var(--accent); color: #fff; border-color: #2c362f; }

@@ -28,6 +28,7 @@ from .manual import (
 )
 from .workspace import (
     add_known_diff,
+    add_known_diffs_bulk,
     add_manual_link,
     add_user_pairs,
     append_history,
@@ -45,6 +46,11 @@ from .workspace import (
     undo_last,
 )
 from .audit import audit, audit_table, clear_audit, load_audit
+from .classify import (
+    classify_diff,
+    classify_value_pair,
+    value_rules_for_cause,
+)
 from .pack import build_verification_pack
 from .project import (
     create_project,
