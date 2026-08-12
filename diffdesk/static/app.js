@@ -11,8 +11,52 @@ import "/static/junction.js";
 export function switchTab(id) {
   $$("#tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === id));
   $$(".tab").forEach(t => t.classList.toggle("active", t.id === id));
+  try { localStorage.setItem("diffdesk-tab", id); } catch { /* 保存できなくても動作に影響なし */ }
+  updateFlowBadges();
+  updateRunBar();
 }
 $$("#tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+
+// フロータブの進行バッジ(✓=完了)と、下部の常時実行バー
+export function updateFlowBadges() {
+  const done = {
+    load: !!(state.fileA && state.fileB),
+    map: state.mapping.length > 0 &&
+      ($("#key-mode").value !== "columns" || state.mapping.some(p => p.is_key)),
+    diff: !!state.diff,
+  };
+  $$(".step-badge").forEach(el => {
+    el.textContent = done[el.dataset.for] ? "✔" : "";
+    el.classList.toggle("done", done[el.dataset.for]);
+  });
+}
+
+export function updateRunBar() {
+  const activeTab = $("#tabs button.active")?.dataset.tab;
+  const show = !!(state.fileA && state.fileB) &&
+    (activeTab === "tab-load" || activeTab === "tab-map");
+  $("#run-bar").hidden = !show;
+  if (show) {
+    $("#run-bar-files").innerHTML =
+      `<span class="rolechip role-a">A</span> ${escapeHtml(state.fileA.filename)} ⇔ ` +
+      `<span class="rolechip role-b">B</span> ${escapeHtml(state.fileB.filename)}`;
+  }
+}
+
+// キーボードショートカット: 1〜6=タブ切替、Ctrl+Enter=差分実行、?=ヘルプ
+const TAB_KEYS = { "1": "tab-load", "2": "tab-map", "3": "tab-diff",
+                   "4": "tab-grid", "5": "tab-junction", "6": "tab-tools" };
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey && e.key === "Enter") {
+    e.preventDefault();
+    $("#btn-run-diff").click();
+    return;
+  }
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" ||
+      e.target.tagName === "TEXTAREA" || $("#dialog").open) return;
+  if (TAB_KEYS[e.key] && !e.ctrlKey && !e.altKey && !e.metaKey) switchTab(TAB_KEYS[e.key]);
+  if (e.key === "?") $("#help-btn").click();
+});
 
 // ---------------------------------------------------------------- アップロード
 const ENCODINGS = [
@@ -66,6 +110,8 @@ async function assignRole(fileId, side) {
 
 function updateNextSteps() {
   $("#next-steps").hidden = !(state.fileA && state.fileB);
+  updateFlowBadges();
+  updateRunBar();
 }
 
 function renderAssignments() {
@@ -428,6 +474,7 @@ export function rebuildMappingSelects() {
   renderMappingTable();
   renderFilters();
   fillFuzzySelects();
+  updateFlowBadges();
 }
 
 function transformSummary(t) {
@@ -527,7 +574,7 @@ async function doAutomap() {
   return r.pairs.length;
 }
 
-$("#btn-automap").onclick = () => doAutomap().catch(e => toast(e.message, true));
+$("#btn-automap").onclick = () => doAutomap().then(updateFlowBadges).catch(e => toast(e.message, true));
 
 // ---- 行フィルタ
 function renderFilters() {
@@ -782,6 +829,7 @@ export function onKeyModeChange() {
   hint.hidden = !KEY_MODE_HINTS[mode];
   hint.textContent = KEY_MODE_HINTS[mode] || "";
   renderMappingTable();
+  updateFlowBadges();
 }
 $("#key-mode").onchange = onKeyModeChange;
 
@@ -800,12 +848,24 @@ async function runDiff() {
       options: currentOptions(),
       row_filter: { conditions_a: state.filtersA, conditions_b: state.filtersB },
     };
+    setRunBusy(true);
     state.diff = await postJson("/api/diff", body);
     state.mergeChoices = {};
     switchTab("tab-diff");
     renderDiff();
     toast("差分を実行しました");
   } catch (e) { toast(e.message, true); }
+  finally { setRunBusy(false); updateFlowBadges(); }
+}
+
+function setRunBusy(busy) {
+  for (const sel of ["#btn-run-diff", "#run-bar-diff", "#btn-omakase"]) {
+    const b = $(sel);
+    if (!b) continue;
+    b.disabled = busy;
+    if (busy) { b.dataset.label = b.textContent; b.textContent = "実行中…"; }
+    else if (b.dataset.label) { b.textContent = b.dataset.label; }
+  }
 }
 $("#btn-run-diff").onclick = runDiff;
 
@@ -955,9 +1015,15 @@ $("#help-btn").onclick = () => {
     <li><b>1. ファイル読み込み</b> — CSV/Excelを何個でもドロップ。基準(A)と比較(B)をラジオで選択。文字化けは「読込設定」から直せます</li>
     <li><b>2. 紐づけ設定</b> — 「自動対応付け」で列を対応付け。キーが無いファイルは<b>キー方式</b>を「行番号」「行の内容」に</li>
     <li><b>3. 照合結果</b> — 統合/左右分割で差異を確認。<b>「未対応」フィルタ+左右分割</b>で紐づけモード(●をドラッグ)。問題ない差異は「既知にする」で容認</li>
-    <li><b>4. 編集・整形</b> — セル編集・一括クレンジング・検索置換・Data Loaderエラー分析</li>
-    <li><b>5. 多対多検証</b> — 中間(ジャンクション)オブジェクトの投入検証</li>
+    <li><b>編集・整形</b> — セル編集・一括クレンジング・検索置換</li>
+    <li><b>多対多検証</b> — 中間(ジャンクション)オブジェクトの投入検証</li>
+    <li><b>ツール</b> — ファイル結合・文字コード変換・Data Loaderエラー分析・健康診断</li>
   </ol>
+  <h3 style="margin:10px 0 4px">ショートカット</h3>
+  <ul style="line-height:1.8; padding-left:1.4em">
+    <li><b>1〜6</b> タブ切替 / <b>Ctrl+Enter</b> 差分を実行 / <b>?</b> このヘルプ</li>
+    <li>照合結果で <b>n</b> / <b>p</b> = 次/前の要確認行へジャンプ</li>
+  </ul>
   <h3 style="margin:10px 0 4px">よく使う機能</h3>
   <ul style="line-height:1.8; padding-left:1.4em">
     <li><b>案件</b>(画面上部) — 既知差分・履歴・手動紐づけ・辞書を案件ごとに分けて保存</li>
@@ -1040,3 +1106,26 @@ async function restoreWorksession(name) {
 
 document.addEventListener("diffdesk:workspace-changed", loadWorksessions);
 loadWorksessions();
+
+// ---------------------------------------------------------------- サブタブ(照合タブ内)
+$$("#diff-subtabs button").forEach(b => b.onclick = () => {
+  $$("#diff-subtabs button").forEach(x => x.classList.toggle("active", x === b));
+  $$(".subtab-panel").forEach(pn =>
+    pn.classList.toggle("active", pn.id === b.dataset.sub));
+  try { localStorage.setItem("diffdesk-subtab", b.dataset.sub); } catch { /* 無視 */ }
+});
+
+// 実行バー
+$("#run-bar-diff").onclick = () => $("#btn-run-diff").click();
+
+// 前回のタブ・サブタブを復元(照合タブは結果が無いと空なので読み込みタブへ)
+try {
+  const sub = localStorage.getItem("diffdesk-subtab");
+  if (sub && $("#" + sub)) {
+    $$("#diff-subtabs button").forEach(x =>
+      x.classList.toggle("active", x.dataset.sub === sub));
+    $$(".subtab-panel").forEach(pn => pn.classList.toggle("active", pn.id === sub));
+  }
+  const tab = localStorage.getItem("diffdesk-tab");
+  if (tab && tab !== "tab-diff" && $("#" + tab)) switchTab(tab);
+} catch { /* 復元できなくても既定表示で動く */ }

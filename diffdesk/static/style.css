@@ -453,3 +453,40 @@ tr.row-role-b td { background: #efeadb; }
   background: #b3872c; color: #fff; text-decoration: none; font-weight: 600;
 }
 .update-badge:hover { background: #c79939; }
+
+/* ---------------- v0.19.0 UI再構成 ---------------- */
+/* フロータブと補助タブの視覚分離 */
+nav#tabs { align-items: flex-end; }
+nav#tabs .tab-arrow { color: #6f7a72; font-size: 11px; padding: 0 1px 7px; align-self: flex-end; }
+nav#tabs .tab-sep { width: 14px; border-left: 1px solid #55605a; margin: 4px 6px 4px 12px; }
+nav#tabs button.aux { background: #37423a; color: #9aa59d; font-size: 12px; padding: 6px 12px 5px; }
+nav#tabs button.aux.active { background: var(--bg); color: var(--text); }
+.step-badge { display: inline-block; min-width: 0; color: #7fbf7f; font-weight: bold; margin-right: 3px; }
+nav#tabs button.active .step-badge { color: #2e6b28; }
+
+/* 照合タブ内のサブタブ */
+.subtabs { display: flex; gap: 2px; margin-bottom: 8px; border-bottom: 2px solid var(--accent); }
+.subtabs button {
+  background: #e3e0d6; border: 1px solid var(--border-strong); border-bottom: none;
+  padding: 5px 18px; font-size: 13px;
+}
+.subtabs button.active {
+  background: var(--accent); color: #fff; font-weight: bold; border-color: var(--accent);
+}
+.subtab-panel { display: none; }
+.subtab-panel.active { display: block; }
+
+/* 下部の常時実行バー */
+#run-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: flex; align-items: center; gap: 12px; justify-content: center;
+  background: var(--accent); color: #e8e5da; padding: 6px 16px;
+  border-top: 2px solid #2c362f; font-size: 12px;
+}
+#run-bar[hidden] { display: none; }
+#run-bar .hint { color: #b9c2bb; }
+#run-bar button.primary {
+  background: linear-gradient(#f2f0ea, #dbd7cc); color: var(--accent);
+  border-color: #2c362f; font-weight: bold; padding: 5px 22px; font-size: 13px;
+}
+main { padding-bottom: 46px; } /* 実行バーに隠れないように */
