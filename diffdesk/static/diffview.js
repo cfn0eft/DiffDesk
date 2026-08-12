@@ -1186,3 +1186,26 @@ document.addEventListener("diffdesk:workspace-changed", () => {
   loadHistory();
   refreshAfterKnownChange();
 });
+
+// ---------------------------------------------------------------- 監査ログ・検証パック
+async function loadAuditList() {
+  try {
+    const { records } = await (await api("/api/audit?limit=100")).json();
+    $("#audit-list").innerHTML = records.length
+      ? `<table><thead><tr><th>日時</th><th>操作</th><th>内容</th></tr></thead><tbody>` +
+        records.map(r =>
+          `<tr><td class="hint">${escapeHtml(r.at)}</td><td><b>${escapeHtml(r.action)}</b></td>` +
+          `<td>${escapeHtml(r.detail || "")}</td></tr>`).join("") + `</tbody></table>`
+      : `<p class="hint">まだ記録がありません。照合や登録を行うと自動で記録されます。</p>`;
+  } catch { /* 表示のみなので無視 */ }
+}
+$("#audit-refresh").onclick = loadAuditList;
+$("#btn-export-audit").onclick = () => postDownload("/api/export/audit", {}, "audit.csv");
+$("#btn-export-pack").onclick = () => {
+  if (!state.diff) return toast("先に差分を実行してください。", true);
+  postDownload(`/api/export/pack/${state.diff.diff_id}`,
+    { only_b_is_error: !$("#verify-allow-b").checked }, "pack.zip");
+  toast("検証パック(zip)を出力しました。証跡一式が入っています。");
+};
+document.addEventListener("diffdesk:workspace-changed", loadAuditList);
+loadAuditList();

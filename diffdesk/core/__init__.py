@@ -44,6 +44,8 @@ from .workspace import (
     remove_user_pair,
     undo_last,
 )
+from .audit import audit, audit_table, clear_audit, load_audit
+from .pack import build_verification_pack
 from .project import (
     create_project,
     delete_project,

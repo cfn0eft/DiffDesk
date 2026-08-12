@@ -333,12 +333,21 @@
       </div>
       <div id="history-list"></div>
     </details>
+    <details class="card sub">
+      <summary>監査ログ(この案件で行った操作の証跡)</summary>
+      <div class="toolbar">
+        <button id="audit-refresh" class="mini">更新</button>
+        <button id="btn-export-audit" class="mini">CSVで出力</button>
+      </div>
+      <div id="audit-list"></div>
+    </details>
     <div class="card">
       <h2>出力</h2>
       <div class="toolbar wrap">
         <button id="btn-export-report-csv">照合レポートCSV</button>
         <button id="btn-export-report-xlsx">照合レポートExcel(色付き)</button>
         <button id="btn-export-html" class="primary">共有用HTMLレポート</button>
+        <button id="btn-export-pack" title="照合レポート・検証レポート・HTMLレポート・既知差分・手動紐づけ・監査ログをzipに一括出力">検証パック(zip)</button>
         <span class="spacer"></span>
         <label><input type="checkbox" id="merge-include-b"> Bのみ行も含める</label>
         <button id="btn-merge">マージ結果を新規ファイル化</button>
