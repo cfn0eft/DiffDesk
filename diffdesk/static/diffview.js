@@ -27,7 +27,8 @@ export function renderDiff() {
   const total = s.only_a + s.only_b + s.changed + s.same;
   const labels = { "": ["全て", total], only_a: ["Aのみ", s.only_a],
                    only_b: ["Bのみ", s.only_b], changed: ["変更", s.changed],
-                   same: ["一致", s.same] };
+                   same: ["一致", s.same],
+                   "only_a,only_b": ["未対応", s.only_a + s.only_b] };
   $$(".statusfilter").forEach(b => {
     const [name, count] = labels[b.dataset.status];
     b.textContent = `${name} (${count})`;
@@ -364,8 +365,67 @@ function renderRowsTable(rows) {
 // 左右分割表示: コードエディタの差分表示風。左=基準(A)、右=比較(B)を
 // レコード対で同じ高さに揃え、赤(未登録)/緑(基準に無し)/黄(相違)で色付け。
 const SPLIT_TABLES = ["#split-a", "#split-g", "#split-b"];
+let splitCompact = false;  // 未対応フィルタ中は左右を詰めて独立スクロール(紐づけモード)
+
+// 紐づけモード: 左=Aのみ・右=Bのみを上から詰めて並べる。行数が多くて
+// 対になる相手が画面外に流れる問題を避け、●同士を直接ドラッグで結べる。
+function renderSplitCompact(rows) {
+  const d = state.diff;
+  const nCols = d.columns_a.length;
+  $("#split-label-a").textContent =
+    `基準 (A) 未登録のみ${state.fileA ? " — " + state.fileA.filename : ""}`;
+  $("#split-label-b").textContent =
+    `比較 (B) 基準に無しのみ${state.fileB ? " — " + state.fileB.filename : ""}`;
+
+  const colgroupA = `<colgroup><col style="width:44px">` +
+    d.columns_a.map(() => `<col style="width:160px">`).join("") +
+    `<col style="width:34px"></colgroup>`;
+  const colgroupB = `<colgroup><col style="width:34px"><col style="width:44px">` +
+    d.columns_b.map(() => `<col style="width:160px">`).join("") + `</colgroup>`;
+  const headA = `<tr><th class="rownum">#</th>` +
+    d.columns_a.map(c => `<th title="${escapeHtml(c)}">${escapeHtml(c)}</th>`).join("") +
+    `<th>&nbsp;</th></tr>`;
+  const headB = `<tr><th>&nbsp;</th><th class="rownum">#</th>` +
+    d.columns_b.map(c => `<th title="${escapeHtml(c)}">${escapeHtml(c)}</th>`).join("") + `</tr>`;
+
+  const dotCell = r => r.known
+    ? `<td class="linkcell">既</td>`
+    : `<td class="linkcell linkable"><span class="linkdot" title="ドラッグして反対側の行に落とすと手動で紐づけ">●</span></td>`;
+  const cells = vals => vals.map(v =>
+    `<td title="${escapeHtml(v)}">${escapeHtml(v)}</td>`).join("");
+
+  let numA = 0, numB = 0;
+  const bodyA = [], bodyB = [];
+  rows.forEach((r, ri) => {
+    if (r.status === "only_a" && r.row_a) {
+      bodyA.push(`<tr class="sp-del" data-ri="${ri}"><td class="rownum">${++numA}</td>` +
+        cells(r.row_a) + dotCell(r) + `</tr>`);
+    } else if (r.status === "only_b" && r.row_b) {
+      bodyB.push(`<tr class="sp-add" data-ri="${ri}">` + dotCell(r) +
+        `<td class="rownum">${++numB}</td>` + cells(r.row_b) + `</tr>`);
+    }
+  });
+  const emptyMsg = side =>
+    `<tr><td class="sp-absent" colspan="${nCols + 2}">(${side}の未対応はありません)</td></tr>`;
+
+  $("#split-a").innerHTML = colgroupA +
+    `<thead>${headA}</thead><tbody>${bodyA.join("") || emptyMsg("A側")}</tbody>`;
+  $("#split-b").innerHTML = colgroupB +
+    `<thead>${headB}</thead><tbody>${bodyB.join("") || emptyMsg("B側")}</tbody>`;
+  $("#split-g").innerHTML = `<thead><tr><th>&nbsp;</th></tr></thead><tbody></tbody>`;
+
+  ["#split-a", "#split-b"].forEach(sel => $$(sel + " tbody tr[data-ri]").forEach(tr => {
+    tr.onclick = () => showRecordDetail(currentRows[+tr.dataset.ri]);
+  }));
+  $("#link-count").innerHTML = (bodyA.length + bodyB.length)
+    ? `<b>未対応 赤${bodyA.length}件・緑${bodyB.length}件</b> — 左右は別々にスクロールできます。行端の●をドラッグして反対側の行に落とすと紐づけできます。 `
+    : "";
+}
 
 function renderSplitTable(rows) {
+  splitCompact = currentStatus === "only_a,only_b";
+  $("#split-view").classList.toggle("compact", splitCompact);
+  if (splitCompact) return renderSplitCompact(rows);
   const d = state.diff;
   const nCols = d.columns_a.length;
   const nValues = d.key_flags.filter(f => !f).length;
@@ -465,7 +525,7 @@ function setSplitHover(ri, on) {
   const pa = $("#split-pane-a"), pb = $("#split-pane-b"), pg = $("#split-pane-g");
   let lock = false;
   const sync = src => () => {
-    if (lock) return;
+    if (lock || splitCompact) return;  // 紐づけモードは左右独立スクロール
     lock = true;
     const other = src === pa ? pb : pa;
     other.scrollTop = src.scrollTop;
@@ -515,8 +575,14 @@ async function fetchDragPreview(drag, targetTr, e) {
 }
 
 function autoScrollPane(e) {
-  // ペインの上下端に近づいたら自動スクロール(縦は3ペイン同期済み)
-  const pane = $("#split-pane-a");
+  // ペインの上下端に近づいたら自動スクロール。紐づけモードでは左右が独立
+  // スクロールなのでカーソルの下にあるペインを動かす
+  let pane = $("#split-pane-a");
+  if (splitCompact) {
+    const mid = $("#split-view").getBoundingClientRect();
+    pane = e.clientX > mid.left + mid.width / 2
+      ? $("#split-pane-b") : $("#split-pane-a");
+  }
   const rect = pane.getBoundingClientRect();
   if (e.clientY < rect.top + 34) pane.scrollTop -= 14;
   else if (e.clientY > rect.bottom - 34) pane.scrollTop += 14;
@@ -541,7 +607,7 @@ function clearLinkTargets() {
 }
 
 document.addEventListener("pointerdown", e => {
-  const dot = e.target.closest("#split-g td.linkable");
+  const dot = e.target.closest("#split-g td.linkable, #split-view td.linkcell.linkable");
   if (!dot) return;
   const tr = dot.closest("tr[data-ri]");
   const r = currentRows[+tr.dataset.ri];

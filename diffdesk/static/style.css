@@ -283,6 +283,14 @@ details[open].card summary { border-bottom-color: var(--border); margin-bottom: 
 #split-g td.linkable { cursor: grab; touch-action: none; user-select: none; }
 .linkdot { display: inline-block; font-size: 13px; animation: dd-pulse 1.6s ease-in-out infinite; }
 #split-g td.linkable:hover .linkdot { animation-duration: 0.6s; }
+/* 紐づけモード(未対応フィルタ): ガターを畳み、行端の●からドラッグ */
+#split-view.compact .gutter-col { display: none; }
+#split-view td.linkcell {
+  text-align: center; padding: 3px 2px; font-weight: 700; color: #a33c34;
+}
+#split-b td.linkcell { color: #2c6e2c; }
+#split-view td.linkcell.linkable { cursor: grab; touch-action: none; user-select: none; }
+#split-view td.linkcell.linkable:hover .linkdot { animation-duration: 0.6s; }
 @keyframes dd-pulse {
   0%, 100% { transform: scale(1); opacity: 0.65; }
   50% { transform: scale(1.45); opacity: 1; }
