@@ -221,5 +221,13 @@ class JunctionExportRequest(JunctionVerifyRequest):
     encoding: str = "utf-8-sig"
 
 
+class MigrationSpecRequest(BaseModel):
+    spec: dict  # 移行定義JSON(1ファイル分)
+
+
+class MigrationSpecsRequest(BaseModel):
+    specs: list[dict]  # 移行定義JSON(複数ファイル分)
+
+
 class ProfileSaveRequest(BaseModel):
     profile: dict

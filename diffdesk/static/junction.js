@@ -23,11 +23,15 @@ function columnsOf(fileId) {
   return jxFiles.find(f => f.file_id === fileId)?.columns ?? [];
 }
 
+const jxDesired = {};  // 移行定義JSONから読み込んだ希望値(列が現れたら自動選択)
+
 function fillSelect(sel, columns, { optional = false } = {}) {
   const cur = sel.value;
   sel.innerHTML = (optional ? `<option value="">(${sel.id === "jx-required" ? "なし" : "確認しない"})</option>` : "") +
     columns.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
-  if (cur && columns.includes(cur)) sel.value = cur;
+  const want = jxDesired[sel.id];
+  if (want && columns.includes(want)) sel.value = want;
+  else if (cur && columns.includes(cur)) sel.value = cur;
 }
 
 function fillColumns(fileSel) {
@@ -175,6 +179,43 @@ $("#jx-export").onclick = async () => {
     });
     await downloadResponse(res, "未取込一覧.csv");
   } catch (e) { toast(e.message, true); }
+};
+
+// 移行定義JSON(仕様書)から設定を自動入力
+$("#jx-spec-btn").onclick = () => $("#jx-spec-input").click();
+$("#jx-spec-input").onchange = async () => {
+  const files = [...$("#jx-spec-input").files];
+  $("#jx-spec-input").value = "";
+  if (!files.length) return;
+  try {
+    const specs = [];
+    for (const f of files) specs.push(JSON.parse(await f.text()));
+    const r = await postJson("/api/migration-spec/junction", { specs });
+    const s = r.settings;
+    $("#jx-template").value = s.key_template;
+    $("#jx-b-pattern").value = s.b_regex_pattern;
+    $("#jx-b-repl").value = s.b_regex_replacement;
+    // セレクトは希望値として保持し、該当列があるファイルを選んだ時点で自動選択
+    const map = {
+      "jx-a-source": s.a_source_col, "jx-b-source": s.b_source_col,
+      "jx-required": s.required_col,
+      "jx-a-ext": s.a_ext_col, "jx-b-ext": s.b_ext_col,
+      "jx-j-key": s.j_key_col,
+      "jx-ref-a": s.j_ref_a_col, "jx-ref-b": s.j_ref_b_col,
+    };
+    for (const [id, val] of Object.entries(map)) {
+      if (!val) continue;
+      jxDesired[id] = val;
+      const sel = $("#" + id);
+      if ([...sel.options].some(o => o.value === val)) sel.value = val;
+    }
+    $("#jx-spec-info").textContent =
+      `定義「${r.object || "中間オブジェクト"}」を読み込みました。` +
+      `ファイルを選ぶと該当する列が自動選択されます。`;
+    toast("移行定義JSONから設定を読み込みました。" +
+      (r.warnings.length ? " 注意: " + r.warnings.join(" / ") : ""),
+      r.warnings.length > 0);
+  } catch (e) { toast(`定義JSONの読み込みに失敗: ${e.message}`, true); }
 };
 
 $("#jx-refresh").onclick = refreshJxFiles;

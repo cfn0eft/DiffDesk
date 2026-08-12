@@ -367,6 +367,16 @@ export function rebuildMappingSelects() {
   fillFuzzySelects();
 }
 
+function transformSummary(t) {
+  const parts = [];
+  if (t.regex_rules?.length) parts.push(`正規表現${t.regex_rules.length}件`);
+  if (t.value_map) parts.push(`値変換${Object.keys(t.value_map).length}組`);
+  if (t.truthy_values) parts.push("真偽値化");
+  if (t.type === "date") parts.push("日付");
+  if (t.type === "number") parts.push("数値");
+  return parts.join("・") || "変換";
+}
+
 function renderMappingTable() {
   const tbody = $("#mapping-table tbody");
   const colsA = state.fileA?.preview.columns || [];
@@ -384,7 +394,8 @@ function renderMappingTable() {
     <td><select data-i="${i}" data-f="col_a">${colOptions(colsA, p.col_a)}</select>
       ${p._method ? `<div class="hint">自動: ${METHOD_JA[p._method] || p._method}一致 ${Math.round((p._confidence || 0) * 100)}%</div>` : ""}</td>
     <td>↔</td>
-    <td><select data-i="${i}" data-f="col_b">${colOptions(colsB, p.col_b)}</select></td>
+    <td><select data-i="${i}" data-f="col_b">${colOptions(colsB, p.col_b)}</select>
+      ${p.transform ? `<div class="hint transform-badge" title="移行定義JSONの変換ルールをA側に再現適用して照合します">🔁 ${escapeHtml(transformSummary(p.transform))}</div>` : ""}</td>
     <td style="text-align:center"><input type="checkbox" data-i="${i}" data-f="is_key" ${p.is_key ? "checked" : ""}></td>
     <td><input data-i="${i}" data-f="sf_field" value="${escapeHtml(p.sf_field || "")}" placeholder="${escapeHtml(p.col_b)}" size="18" title="Data Loader出力時のSalesforce項目名。親レコードを外部IDで参照する場合は Account:ExtId__c の形式で指定できます"></td>
     <td><button class="mini danger" data-del="${i}">×</button></td>
@@ -395,6 +406,11 @@ function renderMappingTable() {
       if (el.dataset.f === "is_key") p.is_key = el.checked;
       else p[el.dataset.f] = el.value || null;
       if (el.dataset.f === "sf_field") p.sf_field = el.value || null;
+      if ((el.dataset.f === "col_a" || el.dataset.f === "col_b") && p.transform) {
+        p.transform = null;  // 列を変えたら定義由来の変換は無効(誤適用防止)
+        renderMappingTable();
+        toast("列を変更したため、この行の変換ルールを解除しました。");
+      }
     };
   });
   tbody.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
@@ -541,7 +557,17 @@ $("#mapping-file-input").onchange = async () => {
   $("#mapping-file-input").value = "";
   if (!file) return;
   try {
-    const parsed = parseMappingJson(JSON.parse(await file.text()));
+    const data = JSON.parse(await file.text());
+    let parsed;
+    let specInfo = null;
+    if (Array.isArray(data?.fields)) {
+      // 移行定義JSON(マッピング仕様書)形式 → サーバーで変換ルールごと解釈
+      const r = await postJson("/api/migration-spec/mapping", { spec: data });
+      parsed = { pairs: r.pairs, options: null, filters: null, externalId: null };
+      specInfo = r;
+    } else {
+      parsed = parseMappingJson(data);
+    }
     const colsA = state.fileA?.preview.columns || [];
     const colsB = state.fileB?.preview.columns || [];
     let dropped = 0;
@@ -559,9 +585,20 @@ $("#mapping-file-input").onchange = async () => {
       state.filtersB = parsed.filters.conditions_b || [];
     }
     rebuildMappingSelects();
-    toast(`${file.name} から${pairs.length}組を読み込みました` +
-          (dropped ? `(列名不一致の${dropped}組は除外)` : "") +
-          (pairs.some(p => p.is_key) ? "" : "。キー列にチェックを入れてください"));
+    let msg = `${file.name} から${pairs.length}組を読み込みました` +
+      (dropped ? `(列名不一致の${dropped}組は除外)` : "");
+    if (specInfo) {
+      const nT = pairs.filter(p => p.transform).length;
+      if (nT) msg += `。変換ルールつき${nT}列は投入時の変換を再現して照合します`;
+      if (specInfo.constants.length) {
+        msg += `。定数項目${specInfo.constants.length}件(` +
+          specInfo.constants.map(c => c.field).join(", ").slice(0, 60) + `)は照合対象外`;
+      }
+      if (specInfo.has_composite) {
+        msg += "。複合キー項目があります — 多対多の検証は「5. 多対多検証」タブでこのJSONを読み込めます";
+      }
+    }
+    toast(msg + (pairs.some(p => p.is_key) ? "" : "。キー列にチェックを入れてください"));
   } catch (e) { toast(`JSONの読み込みに失敗: ${e.message}`, true); }
 };
 

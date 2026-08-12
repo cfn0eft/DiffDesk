@@ -495,6 +495,9 @@
       「1. ファイル読み込み」で読み込んでから選択してください。</p>
     <div class="toolbar">
       <button id="jx-refresh" class="mini">ファイル一覧を更新</button>
+      <button id="jx-spec-btn" title="移行定義JSON(複合キー・スキップ条件・正規化ルールを含む仕様書)を読み込んで下の設定を自動入力します。中間オブジェクトの定義を含めて複数選択できます">移行定義JSONから設定を読み込み</button>
+      <input type="file" id="jx-spec-input" accept=".json,application/json" multiple hidden>
+      <span id="jx-spec-info" class="hint"></span>
     </div>
     <table class="formgrid">
       <tr>

@@ -90,6 +90,11 @@ class ColumnPair:
     col_b: str
     is_key: bool = False
     sf_field: str | None = None  # Data Loader出力時のSalesforce項目名(未指定はcol_b)
+    # 投入時の変換ルール(移行定義JSON由来)。比較時にA側へ再現適用する。
+    # {"type": "picklist"|"boolean"|"date"|"number"|"string",
+    #  "value_map": {...}, "truthy_values": [...], "default_value": str,
+    #  "regex_rules": [{"pattern": str, "replacement": str}]}
+    transform: dict | None = None
 
     @property
     def output_field(self) -> str:
@@ -100,11 +105,13 @@ class ColumnPair:
 
     @classmethod
     def from_dict(cls, d: dict) -> "ColumnPair":
+        transform = d.get("transform")
         return cls(
             col_a=str(d["col_a"]),
             col_b=str(d["col_b"]),
             is_key=bool(d.get("is_key", False)),
             sf_field=d.get("sf_field") or None,
+            transform=transform if isinstance(transform, dict) and transform else None,
         )
 
 

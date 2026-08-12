@@ -19,7 +19,10 @@ from ..core import (
     apply_manual_pairs,
     DiffDeskError,
     JunctionConfig,
+    build_junction_settings,
+    build_mapping_pairs,
     build_orphan_table,
+    parse_migration_spec,
     verify_junction,
     add_manual_link,
     build_link_prompt,
@@ -605,6 +608,32 @@ def export_report(diff_id: str, req: sc.ExportReportRequest):
     table = build_report_table(result)
     raw = write_csv(table, encoding=req.encoding)
     return _download(raw, "差分レポート.csv", "text/csv")
+
+
+# ---------------------------------------------------------------- 移行定義JSON
+
+@router.post("/migration-spec/mapping")
+def migration_spec_mapping(req: sc.MigrationSpecRequest):
+    """移行定義JSONを紐づけ設定用のマッピング(変換ルールつき)に変換。"""
+    spec = parse_migration_spec(req.spec)
+    pairs = build_mapping_pairs(spec)
+    return {
+        "pairs": pairs,
+        "object": spec["object"],
+        "external_id_field": spec["external_id_field"],
+        "constants": spec["constants"],
+        "transform_count": sum(1 for p in pairs if p["transform"]),
+        "has_composite": spec["composite"] is not None,
+    }
+
+
+@router.post("/migration-spec/junction")
+def migration_spec_junction(req: sc.MigrationSpecsRequest):
+    """移行定義JSON(複数可)から多対多検証タブの設定を組み立てる。"""
+    if not req.specs:
+        raise DiffDeskError("移行定義JSONが指定されていません。")
+    specs = [parse_migration_spec(s) for s in req.specs]
+    return build_junction_settings(specs)
 
 
 # ---------------------------------------------------------------- 多対多検証

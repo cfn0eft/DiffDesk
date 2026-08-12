@@ -20,6 +20,7 @@ from .fuzzy import _similarity
 from .mapping_suggest import _canon_value
 from .model import CellDiff, DiffDeskError, DiffResult, RowDiff
 from .normalize import make_normalizer, values_equal
+from .transform import pair_values_equal
 
 
 def validate_manual_pair(pair: dict) -> dict:
@@ -62,8 +63,9 @@ def apply_manual_pairs(diff: DiffResult, pairs: list[dict]) -> DiffResult:
             CellDiff(col_a=cols_a[i], col_b=cols_b[i],
                      value_a=ra.row_a[i], value_b=rb.row_b[i])
             for i in range(len(cols_a))
-            if not values_equal(ra.row_a[i], rb.row_b[i], normalizer,
-                                diff.options.numeric_tolerance)
+            if not pair_values_equal(ra.row_a[i], rb.row_b[i],
+                                     diff.mapping.pairs[i], normalizer,
+                                     diff.options.numeric_tolerance)
         ]
         merged[ka] = RowDiff(
             key=ka, status="changed" if cell_diffs else "same",
