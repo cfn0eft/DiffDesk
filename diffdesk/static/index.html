@@ -194,6 +194,7 @@
     </div>
     <div id="summary-cards" class="cards"></div>
     <div id="columns-summary"></div>
+    <div id="classify-summary"></div>
     <div id="diff-warnings"></div>
     <div class="card" id="diff-table-card">
       <div class="toolbar">
@@ -207,6 +208,7 @@
         <button class="statusfilter" data-status="only_a,only_b" title="未対応(Aのみ+Bのみ)だけを表示。左右分割では左=Aのみ・右=Bのみを詰めて並べ、行数が多くても紐づけしやすくなります">未対応</button>
         <button class="statusfilter" data-status="changed">変更</button>
         <button class="statusfilter" data-status="same">一致</button>
+        <input id="diff-search" placeholder="検索(キー・値)" title="キーまたはセルの値で行を絞り込み(部分一致)" style="width:150px">
         <span class="spacer"></span>
         <button id="jump-prev" title="前の要確認行へ(pキー)">◀ 差異</button>
         <button id="jump-next" title="次の要確認行へ(nキー)">差異 ▶</button>

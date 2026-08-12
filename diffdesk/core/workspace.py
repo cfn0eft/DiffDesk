@@ -120,6 +120,44 @@ def add_known_diff(entry: dict, *, directory: Path | None = None) -> list[dict]:
     return entries
 
 
+def add_known_diffs_bulk(new_entries: list[dict], label: str = "既知差分の一括登録",
+                         *, directory: Path | None = None) -> int:
+    """複数の既知差分を1操作として登録する(アンドゥ1回で全て戻る)。
+
+    各エントリはadd_known_diffと同じ形式(検証もadd_known_diffに委譲したいが、
+    アンドゥを1つにまとめるためここで直接追記する)。追加できた件数を返す。
+    """
+    entries = load_known_diffs(directory=directory)
+    existing = [{k: e.get(k) for k in e if k not in ("note", "added_at")}
+                for e in entries]
+    added = 0
+    recorded = False
+    for entry in new_entries:
+        kind = entry.get("type")
+        required = {"cell": ("key", "col_a", "value_a", "value_b"),
+                    "row": ("key", "status"),
+                    "value": ("col_a", "value_a", "value_b")}.get(kind)
+        if required is None or any(f not in entry for f in required):
+            raise DiffDeskError(f"既知差分のエントリが不正です: {entry}")
+        normalized = {k: entry[k] for k in ("type", *required)}
+        if "key" in normalized:
+            normalized["key"] = [str(k) for k in entry["key"]]
+        if normalized in existing:
+            continue
+        if not recorded:
+            _record_undo(directory, label, "known_diffs.json")
+            recorded = True
+        normalized["note"] = str(entry.get("note", ""))
+        normalized["added_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+        entries.append(normalized)
+        existing.append({k: normalized[k] for k in normalized
+                         if k not in ("note", "added_at")})
+        added += 1
+    if added:
+        _save_json(_data_dir(directory) / "known_diffs.json", entries)
+    return added
+
+
 def remove_known_diff(index: int, *, directory: Path | None = None) -> list[dict]:
     entries = load_known_diffs(directory=directory)
     if 0 <= index < len(entries):

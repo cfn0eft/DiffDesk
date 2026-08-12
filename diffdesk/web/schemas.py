@@ -264,3 +264,7 @@ class WorksessionNameRequest(BaseModel):
 
 class ExportPackRequest(BaseModel):
     only_b_is_error: bool = True
+
+
+class KnownByCauseRequest(BaseModel):
+    cause: str

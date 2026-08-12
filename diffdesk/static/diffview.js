@@ -7,6 +7,9 @@ const PAGE_SIZE = 200;
 let currentStatus = "";
 let currentOffset = 0;
 let currentTotal = 0;
+let currentQuery = "";   // 検索(キー・値)
+let currentCause = "";   // 差異の原因(自動分類)
+let currentCol = "";     // 列フィルタ
 
 const STATUS_JA = { only_a: "Aのみ", only_b: "Bのみ", changed: "変更", same: "一致" };
 
@@ -44,9 +47,14 @@ export function renderDiff() {
 
   currentStatus = "";
   currentOffset = 0;
+  currentQuery = "";
+  currentCause = "";
+  currentCol = "";
+  $("#diff-search").value = "";
   $$(".statusfilter").forEach(b =>
     b.classList.toggle("active", b.dataset.status === ""));
   renderStatusbar();
+  loadClassify();
   loadVerification();
   loadColumnsSummary();
   loadHistory();
@@ -70,13 +78,17 @@ async function loadColumnsSummary() {
     $("#columns-summary").innerHTML =
       `<span class="hint">差異の多い項目:</span> ` +
       r.columns.map(c =>
-        `<button class="mini colsum" title="クリックで変更行のみ表示">${escapeHtml(c.column)} (${c.count})</button>`
+        `<button class="mini colsum" data-col="${escapeHtml(c.column)}" title="クリックでこの列に差異がある行だけ表示(再クリックで解除)">${escapeHtml(c.column)} (${c.count})</button>`
       ).join(" ");
     $$("#columns-summary .colsum").forEach(b => b.onclick = () => {
-      currentStatus = "changed";
+      const col = b.dataset.col;
+      currentCol = currentCol === col ? "" : col;  // 再クリックで解除
+      currentStatus = currentCol ? "changed" : "";
       currentOffset = 0;
       $$(".statusfilter").forEach(x =>
-        x.classList.toggle("active", x.dataset.status === "changed"));
+        x.classList.toggle("active", x.dataset.status === currentStatus));
+      $$("#columns-summary .colsum").forEach(x =>
+        x.classList.toggle("active", x.dataset.col === currentCol));
       loadRows();
     });
   } catch { /* 表示のみなので無視 */ }
@@ -149,6 +161,7 @@ function refreshAfterKnownChange() {
   if (state.diff) {
     loadVerification();
     loadColumnsSummary();
+    loadClassify();
     loadRows();
     loadLinkList();
   }
@@ -272,6 +285,7 @@ async function loadRows() {
   try {
     const params = new URLSearchParams({
       status: currentStatus, offset: currentOffset, limit: PAGE_SIZE,
+      q: currentQuery, cause: currentCause, col: currentCol,
     });
     const res = await (await api(`/api/diff/${d.diff_id}/rows?${params}`)).json();
     currentTotal = res.total;
@@ -1209,3 +1223,68 @@ $("#btn-export-pack").onclick = () => {
 };
 document.addEventListener("diffdesk:workspace-changed", loadAuditList);
 loadAuditList();
+
+// ---------------------------------------------------------------- 差異の自動分類
+async function loadClassify() {
+  const d = state.diff;
+  if (!d) return;
+  try {
+    const r = await (await api(`/api/diff/${d.diff_id}/classify`)).json();
+    const box = $("#classify-summary");
+    if (!r.causes.length) {
+      box.innerHTML = "";
+      return;
+    }
+    box.innerHTML = `<span class="hint">差異の内訳(自動分類):</span> ` +
+      r.causes.map(c => {
+        const sample = c.samples[0]
+          ? ` 例: ${c.samples[0].value_a} ↔ ${c.samples[0].value_b}` : "";
+        const bulk = c.cause !== "real"
+          ? `<button class="mini cls-bulk" data-cause="${c.cause}" data-count="${c.count}" data-rules="${c.rule_count}" title="この分類の差異(値の組${c.rule_count}種)をまとめて既知にする">✓一括既知</button>`
+          : "";
+        return `<span class="clschip ${c.cause === "real" ? "cls-real" : ""}">` +
+          `<button class="mini cls-filter ${currentCause === c.cause ? "active" : ""}" data-cause="${c.cause}" ` +
+          `title="${escapeHtml(c.label)}${escapeHtml(sample)}(クリックで絞り込み・再クリックで解除)">` +
+          `${escapeHtml(c.label)} <b>${c.count}</b></button>${bulk}</span>`;
+      }).join(" ");
+    $$(".cls-filter").forEach(b => b.onclick = () => {
+      const cause = b.dataset.cause;
+      currentCause = currentCause === cause ? "" : cause;
+      currentStatus = currentCause ? "changed" : "";
+      currentOffset = 0;
+      $$(".statusfilter").forEach(x =>
+        x.classList.toggle("active", x.dataset.status === currentStatus));
+      $$(".cls-filter").forEach(x =>
+        x.classList.toggle("active", x.dataset.cause === currentCause));
+      loadRows();
+    });
+    $$(".cls-bulk").forEach(b => b.onclick = async () => {
+      const label = b.closest(".clschip").querySelector(".cls-filter").textContent.trim();
+      if (!window.confirm(
+        `「${label.replace(/\s*\d+$/, "")}」の差異 ${b.dataset.count}件(値の組${b.dataset.rules}種)を、` +
+        `まとめて既知(値ルール)として登録します。よろしいですか?\n` +
+        `※「↩ 元に戻す」1回で取り消せます`)) return;
+      try {
+        const r = await postJson(`/api/diff/${state.diff.diff_id}/known-by-cause`,
+          { cause: b.dataset.cause });
+        toast(`${r.registered}種の値ルールを既知に登録しました`);
+        currentCause = "";
+        refreshAfterKnownChange();
+        loadClassify();
+      } catch (e) { toast(e.message, true); }
+    });
+  } catch { /* 表示のみなので無視 */ }
+}
+
+// ---------------------------------------------------------------- 検索(キー・値)
+{
+  let timer = null;
+  $("#diff-search").addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      currentQuery = $("#diff-search").value.trim();
+      currentOffset = 0;
+      loadRows();
+    }, 300);
+  });
+}

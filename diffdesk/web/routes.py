@@ -12,6 +12,7 @@ from ..core import (
     CLEAN_OPS,
     COLUMN_OPS,
     add_known_diff,
+    add_known_diffs_bulk,
     add_user_pairs,
     analyze_errors,
     append_history,
@@ -37,6 +38,9 @@ from ..core import (
     validate_manual_pair,
     audit,
     audit_table,
+    classify_diff,
+    classify_value_pair,
+    value_rules_for_cause,
     build_verification_pack,
     clear_history,
     clear_known_diffs,
@@ -580,10 +584,23 @@ def run_diff(req: sc.DiffRequest):
 
 
 @router.get("/diff/{diff_id}/rows")
-def diff_rows(diff_id: str, status: str = "", offset: int = 0, limit: int = 200):
+def diff_rows(diff_id: str, status: str = "", offset: int = 0, limit: int = 200,
+              q: str = "", cause: str = "", col: str = ""):
     result = _diff_with_known(diff_id)
     statuses = set(status.split(",")) if status else None
     rows = [r for r in result.rows if statuses is None or r.status in statuses]
+    if col:  # この列に差異がある行のみ
+        rows = [r for r in rows if any(cd.col_a == col for cd in r.cell_diffs)]
+    if cause:  # 差異の原因で絞り込み(自動分類)
+        rows = [r for r in rows if r.status == "changed" and any(
+            classify_value_pair(cd.value_a, cd.value_b) == cause
+            for cd in r.cell_diffs)]
+    if q:  # キー・値の部分一致検索
+        ql = q.lower()
+        rows = [r for r in rows
+                if ql in "/".join(r.key).lower()
+                or any(ql in (v or "").lower()
+                       for v in (r.row_a or []) + (r.row_b or []))]
     limit = max(1, min(limit, 2000))
     return {
         "total": len(rows),
@@ -1101,6 +1118,29 @@ def delete_all_known_diffs():
 def diff_columns_summary(diff_id: str):
     result = _diff_with_known(diff_id)
     return {"columns": column_diff_summary(result)}
+
+
+@router.get("/diff/{diff_id}/classify")
+def diff_classify(diff_id: str):
+    """変更セルの差異原因を自動分類して集計する。"""
+    return classify_diff(_diff_with_known(diff_id))
+
+
+@router.post("/diff/{diff_id}/known-by-cause")
+def known_by_cause(diff_id: str, req: sc.KnownByCauseRequest):
+    """指定した差異原因の値の組を、値ルール既知としてまとめて登録する。"""
+    if req.cause == "real":
+        raise DiffDeskError("「真の相違」は一括既知の対象にできません。個別に確認してください。")
+    result = _diff_with_known(diff_id)
+    rules = value_rules_for_cause(result, req.cause)
+    if not rules:
+        raise DiffDeskError("対象の差異がありません。")
+    from ..core.classify import CAUSE_JA as _CJA
+    added = add_known_diffs_bulk(
+        rules, label=f"既知差分の一括登録({_CJA.get(req.cause, req.cause)})")
+    audit("既知差分一括登録(自動分類)",
+          f"cause={req.cause} ルール{added}種")
+    return {"registered": added}
 
 
 @router.get("/diff/{diff_id}/value-rule-count")
