@@ -106,3 +106,47 @@ class TestSpecImportARegex:
         s = r["settings"]
         assert s["a_regex_pattern"] == r"^(\d+)$"
         assert s["a_regex_replacement"] == r"\1.0"
+
+
+class TestValueRuleKnown:
+    """v0.12.2: 値ルール型の既知差分(同じ差異の一括登録)。"""
+
+    def make_diff(self):
+        from diffdesk.core import ColumnPair, MappingConfig, diff_tables
+        a = Table(columns=["id", "部署"],
+                  rows=[["1", "営業"], ["2", "営業"], ["3", "営業"], ["4", "開発"]])
+        b = Table(columns=["id", "部署"],
+                  rows=[["1", "営業部"], ["2", "営業部"], ["3", "総務部"], ["4", "開発部"]])
+        m = MappingConfig(pairs=[ColumnPair("id", "id", is_key=True),
+                                 ColumnPair("部署", "部署")])
+        return diff_tables(a, b, m)
+
+    def test_value_rule_applies_to_all_rows(self):
+        from diffdesk.core import apply_known_diffs, build_verification
+        d = self.make_diff()
+        assert d.summary["changed"] == 4
+        out = apply_known_diffs(d, [
+            {"type": "value", "col_a": "部署", "value_a": "営業", "value_b": "営業部"}])
+        # 営業→営業部 の2行(id 1,2)だけが既知になり、営業→総務部/開発→開発部は残る
+        assert out.summary["same"] == 2 and out.summary["changed"] == 2
+        v = build_verification(out)
+        assert v.known_cells == 2
+
+    def test_value_rule_store_validation(self, tmp_path):
+        from diffdesk.core import add_known_diff, load_known_diffs
+        e = {"type": "value", "col_a": "部署", "value_a": "営業", "value_b": "営業部"}
+        entries = add_known_diff(e, directory=tmp_path)
+        assert len(entries) == 1 and "key" not in entries[0]
+        entries = add_known_diff(e, directory=tmp_path)  # 重複無視
+        assert len(entries) == 1
+        with pytest.raises(DiffDeskError):
+            add_known_diff({"type": "value", "col_a": "部署"}, directory=tmp_path)
+
+    def test_cell_and_value_coexist(self):
+        from diffdesk.core import apply_known_diffs
+        d = self.make_diff()
+        out = apply_known_diffs(d, [
+            {"type": "value", "col_a": "部署", "value_a": "営業", "value_b": "営業部"},
+            {"type": "cell", "key": ["4"], "col_a": "部署",
+             "value_a": "開発", "value_b": "開発部"}])
+        assert out.summary["same"] == 3 and out.summary["changed"] == 1

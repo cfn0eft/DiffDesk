@@ -120,11 +120,13 @@ async function loadKnownList() {
     $("#known-list").innerHTML =
       `<table><thead><tr><th>種類</th><th>キー</th><th>内容</th><th>登録日</th><th></th></tr></thead><tbody>` +
       r.entries.map((e, i) => {
-        const desc = e.type === "cell"
+        const desc = (e.type === "cell" || e.type === "value")
           ? `${escapeHtml(e.col_a)}: ${escapeHtml(e.value_a)} → ${escapeHtml(e.value_b)}`
           : (e.status === "only_a" ? "比較先に無い(未登録を容認)" : "基準に無い(存在を容認)");
-        return `<tr><td>${e.type === "cell" ? "セル差分" : "欠落"}</td>` +
-          `<td>${escapeHtml(e.key.join("/"))}</td><td>${desc}</td>` +
+        const kind = e.type === "cell" ? "セル差分"
+          : e.type === "value" ? "値ルール(全行)" : "欠落";
+        return `<tr><td>${kind}</td>` +
+          `<td>${e.key ? escapeHtml(e.key.join("/")) : '<span class="hint">全行</span>'}</td><td>${desc}</td>` +
           `<td class="hint">${escapeHtml(e.added_at || "")}</td>` +
           `<td><button class="mini danger known-del" data-i="${i}">削除</button></td></tr>`;
       }).join("") + `</tbody></table>`;
@@ -151,10 +153,10 @@ function refreshAfterKnownChange() {
   }
 }
 
-async function registerKnown(entry) {
+async function registerKnown(entry, message) {
   try {
     await postJson("/api/known-diffs", { entry });
-    toast("既知差分として登録しました。以後の照合では問題に数えません。");
+    toast(message || "既知差分として登録しました。以後の照合では問題に数えません。");
     $("#dialog").close();
     refreshAfterKnownChange();
   } catch (e) { toast(e.message, true); }
@@ -885,7 +887,9 @@ function showRecordDetail(r) {
     const label = colA === colB ? colA : `${colA} / ${colB}`;
     const knownBtn = changed.has(colA)
       ? `<button class="mini known-cell-btn" data-col="${escapeHtml(colA)}" ` +
-        `title="この差異を確認済み・問題なしとして登録">既知にする</button>`
+        `title="この行のこの差異だけを確認済み・問題なしとして登録">既知にする</button> ` +
+        `<button class="mini known-value-btn" data-col="${escapeHtml(colA)}" ` +
+        `title="この列で同じ値の組(A→B)になっている差異を、すべての行でまとめて既知にする(値ルールとして保存)">全行で既知</button>`
       : "";
     return `<tr class="${cls}"><td>${mark}</td><td>${escapeHtml(label)}</td>` +
       `<td>${escapeHtml(va)}</td><td>${escapeHtml(vb)}</td><td>${knownBtn}</td></tr>`;
@@ -965,6 +969,12 @@ function showRecordDetail(r) {
     const cd = r.cell_diffs.find(x => x.col_a === b.dataset.col);
     if (cd) registerKnown({ type: "cell", key: [...r.key], col_a: cd.col_a,
                             value_a: cd.value_a, value_b: cd.value_b });
+  });
+  dlg.querySelectorAll(".known-value-btn").forEach(b => b.onclick = () => {
+    const cd = r.cell_diffs.find(x => x.col_a === b.dataset.col);
+    if (cd) registerKnown({ type: "value", col_a: cd.col_a,
+                            value_a: cd.value_a, value_b: cd.value_b },
+                          `「${cd.col_a}: ${cd.value_a} → ${cd.value_b}」を全行で既知にしました。`);
   });
   const rowBtn = dlg.querySelector("#known-row-btn");
   if (rowBtn) rowBtn.onclick = () =>

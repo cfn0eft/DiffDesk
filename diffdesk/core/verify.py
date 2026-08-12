@@ -215,15 +215,19 @@ def build_verification_xlsx(diff: DiffResult, *, only_b_is_error: bool = True) -
           "" if e.get("score") is None else e["score"],
           e.get("note", ""), e.get("added_at", "")] for e in links])
     knowns = load_known_diffs()
+    def _known_kind(e):
+        return {"cell": "セル差分", "value": "値ルール(全行)"}.get(e.get("type"), "欠落")
+
+    def _known_desc(e):
+        if e.get("type") in ("cell", "value"):
+            return f"{e.get('col_a', '')}: {e.get('value_a', '')} → {e.get('value_b', '')}"
+        return ("比較先に無い(未登録を容認)" if e.get("status") == "only_a"
+                else "基準に無い(存在を容認)")
+
     _audit_sheet(
         "既知差分",
         ["種類", "キー", "内容", "メモ", "登録日時"],
-        [["セル差分" if e.get("type") == "cell" else "欠落",
-          "/".join(e.get("key", [])),
-          (f"{e.get('col_a', '')}: {e.get('value_a', '')} → {e.get('value_b', '')}"
-           if e.get("type") == "cell"
-           else ("比較先に無い(未登録を容認)" if e.get("status") == "only_a"
-                 else "基準に無い(存在を容認)")),
+        [[_known_kind(e), "/".join(e.get("key", [])), _known_desc(e),
           e.get("note", ""), e.get("added_at", "")] for e in knowns])
 
     out = _io.BytesIO()

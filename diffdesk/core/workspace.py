@@ -38,6 +38,8 @@ def _save_json(path: Path, data) -> None:
 #   {"type": "cell", "key": [...], "col_a": str, "value_a": str, "value_b": str,
 #    "note": str, "added_at": iso8601}
 #   {"type": "row", "key": [...], "status": "only_a"|"only_b", "note": ..., "added_at": ...}
+#   {"type": "value", "col_a": str, "value_a": str, "value_b": str, ...}
+#     — キー不問の値ルール: この列でこの値の組の差異は全行で既知(一括登録用)
 
 def load_known_diffs(*, directory: Path | None = None) -> list[dict]:
     return _load_json(_data_dir(directory) / "known_diffs.json", [])
@@ -51,14 +53,17 @@ def add_known_diff(entry: dict, *, directory: Path | None = None) -> list[dict]:
         required = ("key", "status")
         if entry.get("status") not in ("only_a", "only_b"):
             raise DiffDeskError("既知差分(行)のstatusは only_a / only_b のみです。")
+    elif kind == "value":
+        required = ("col_a", "value_a", "value_b")
     else:
-        raise DiffDeskError(f"既知差分のtypeが不正です: {kind}(cell / row)")
+        raise DiffDeskError(f"既知差分のtypeが不正です: {kind}(cell / row / value)")
     for f in required:
         if f not in entry:
             raise DiffDeskError(f"既知差分に {f} がありません。")
     entries = load_known_diffs(directory=directory)
     normalized = {k: entry[k] for k in ("type", *required)}
-    normalized["key"] = [str(k) for k in entry["key"]]
+    if "key" in normalized:
+        normalized["key"] = [str(k) for k in entry["key"]]
     if any({f: e.get(f) for f in normalized} == normalized for e in entries):
         return entries  # 重複登録は無視
     normalized["note"] = str(entry.get("note", ""))
