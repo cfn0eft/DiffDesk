@@ -150,6 +150,7 @@ class DiffOptions:
     trim: bool = True
     ignore_case: bool = False
     normalize_width: bool = True  # NFKCによる全角半角統一
+    normalize_numeric: bool = True  # 数値の表記を同一視(1551 = 1551.0)
     numeric_tolerance: float | None = None
 
     def to_dict(self) -> dict:
@@ -162,6 +163,7 @@ class DiffOptions:
             trim=bool(d.get("trim", True)),
             ignore_case=bool(d.get("ignore_case", False)),
             normalize_width=bool(d.get("normalize_width", True)),
+            normalize_numeric=bool(d.get("normalize_numeric", True)),
             numeric_tolerance=float(tol) if tol is not None else None,
         )
 
