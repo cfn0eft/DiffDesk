@@ -668,3 +668,45 @@ class TestV0110MigrationSpec:
     def test_bad_spec_400(self, client):
         r = client.post("/api/migration-spec/mapping", json={"spec": {"x": 1}})
         assert r.status_code == 400
+
+
+class TestV0120JunctionSimple:
+    def _files(self, client):
+        fs = upload(client, "src.csv",
+                    "会社,製品\nC1,P1\nC1,P2\nC2,P1\n".encode("utf-8"))["file_id"]
+        fj = upload(client, "j.csv",
+                    "Key__c\nREL-C1-P1\nREL-C9-P9\n".encode("utf-8"))["file_id"]
+        return fs, fj
+
+    def test_two_files_with_relations(self, client):
+        fs, fj = self._files(client)
+        r = client.post("/api/junction-verify", json={
+            "file_source": fs, "file_j": fj,
+            "config": {"a_source_col": "会社", "b_source_col": "製品",
+                       "j_key_col": "Key__c", "key_template": "REL-{A}-{B}"}})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["parent_a"] is None and body["parent_b"] is None
+        assert body["orphans"]["causes"]["unknown"] == 2
+        rel = body["relations"]
+        by_a = {g["a"]: g for g in rel["groups"]}
+        assert by_a["C1"]["ok"] == 1 and by_a["C1"]["ng"] == 1
+        assert by_a["C9"]["items"][0]["status"] == "extra"
+
+    def test_infer_template_endpoint(self, client):
+        fs, fj = self._files(client)
+        r = client.post("/api/junction-verify/infer-template", json={
+            "file_source": fs, "file_j": fj,
+            "a_source_col": "会社", "b_source_col": "製品",
+            "j_key_col": "Key__c"})
+        assert r.status_code == 200, r.text
+        assert r.json()["template"] == "REL-{A}-{B}"
+
+    def test_file_info_endpoint(self, client):
+        fs, _ = self._files(client)
+        r = client.get(f"/api/files/{fs}/info")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["filename"] == "src.csv"
+        assert body["preview"]["columns"] == ["会社", "製品"]
+        assert "parse_params" in body

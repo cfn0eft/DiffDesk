@@ -399,3 +399,29 @@ dialog label { display: block; margin-top: 8px; margin-bottom: 8px; }
 .formgrid { width: 100%; }
 .formgrid td .hint { display: block; margin-top: 1px; }
 .formgrid input[type=text], .formgrid input:not([type]) { max-width: 240px; }
+/* ファイルプール(v0.12.0) */
+#pool-list table { width: 100%; }
+.rolechip {
+  display: inline-block; padding: 0 6px; font-size: 11px; font-weight: 700;
+  color: #fff; vertical-align: 1px;
+}
+.rolechip.role-a { background: #3d4a41; }
+.rolechip.role-b { background: #6b5e42; }
+tr.row-role-a td { background: #e9efe9; }
+tr.row-role-b td { background: #efeadb; }
+/* 関係ビュー(v0.12.0) */
+.relgroup { border: 1px solid var(--border); margin-bottom: 6px; background: #fdfcf9; }
+.relhead {
+  padding: 4px 10px; background: #efede6; border-bottom: 1px solid var(--border);
+  display: flex; gap: 12px; align-items: center;
+}
+.relbody { padding: 6px 10px; display: flex; flex-wrap: wrap; gap: 4px; }
+.relchip {
+  display: inline-block; padding: 1px 8px; font-size: 12px;
+  border: 1px solid var(--border-strong); cursor: default;
+}
+.rel-ok { background: #dceadc; color: #2c5e2c; }
+.rel-missing { background: #f2dcdc; color: #7c2d25; font-weight: 600; }
+.rel-extra { background: #f7f2df; color: #6b5518; }
+.jx-c-u { background: #b5b0a4; }
+.req { color: #a33c34; font-size: 11px; font-weight: 700; }

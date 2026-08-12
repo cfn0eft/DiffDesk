@@ -4,7 +4,12 @@
 fastapi等のwebライブラリをimportしてはならない。
 """
 from .address import split_address, split_address_column
-from .junction import JunctionConfig, build_orphan_table, verify_junction
+from .junction import (
+    JunctionConfig,
+    build_orphan_table,
+    infer_key_template,
+    verify_junction,
+)
 from .migration_spec import (
     build_junction_settings,
     build_mapping_pairs,

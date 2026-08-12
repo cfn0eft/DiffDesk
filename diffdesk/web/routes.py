@@ -22,6 +22,7 @@ from ..core import (
     build_junction_settings,
     build_mapping_pairs,
     build_orphan_table,
+    infer_key_template,
     parse_migration_spec,
     verify_junction,
     add_manual_link,
@@ -214,6 +215,13 @@ def list_files():
             "total_rows": len(e.table.rows) if e.table else 0,
         })
     return {"files": result}
+
+
+@router.get("/files/{file_id}/info")
+def get_file_info(file_id: str):
+    """読込設定・プレビューを含む詳細情報(役割割当・読込設定パネル用)。"""
+    entry = store.get_file(file_id)
+    return _file_info(entry, entry.table)
 
 
 @router.get("/files/{file_id}")
@@ -639,9 +647,22 @@ def migration_spec_junction(req: sc.MigrationSpecsRequest):
 # ---------------------------------------------------------------- 多対多検証
 
 def _junction_inputs(req: sc.JunctionVerifyRequest):
-    return (store.get_table(req.file_source), store.get_table(req.file_a),
-            store.get_table(req.file_b), store.get_table(req.file_j),
+    return (store.get_table(req.file_source),
+            store.get_table(req.file_a) if req.file_a else None,
+            store.get_table(req.file_b) if req.file_b else None,
+            store.get_table(req.file_j),
             JunctionConfig.from_dict(req.config))
+
+
+@router.post("/junction-verify/infer-template")
+def junction_infer_template(req: sc.InferTemplateRequest):
+    """中間キーの実例から複合キーの形式({A}-{B}等)を自動推定する。"""
+    return infer_key_template(
+        store.get_table(req.file_source), store.get_table(req.file_j),
+        a_source_col=req.a_source_col, b_source_col=req.b_source_col,
+        j_key_col=req.j_key_col,
+        b_regex_pattern=req.b_regex_pattern,
+        b_regex_replacement=req.b_regex_replacement)
 
 
 @router.post("/junction-verify")
